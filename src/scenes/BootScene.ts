@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { GameState } from '../core/GameState';
 import { TEXTURES } from '../core/constants';
+import initialMapUrl from '../assets/maps/initial-map.png';
 import caramelUrl from '../assets/towers/vira-lata-caramelo.png';
 
 /**
@@ -15,6 +16,7 @@ export class BootScene extends Phaser.Scene {
 
   preload(): void {
     // Único ponto que conhece o caminho literal do asset (contrato C1).
+    this.load.image(TEXTURES.initialMap, initialMapUrl);
     this.load.image(TEXTURES.towerCaramelo, caramelUrl);
 
     // Sem erro silencioso: registra a falha e deixa os consumidores caírem no
@@ -22,6 +24,12 @@ export class BootScene extends Phaser.Scene {
     this.load.on(
       Phaser.Loader.Events.FILE_LOAD_ERROR,
       (file: Phaser.Loader.File) => {
+        if (file.key === TEXTURES.initialMap) {
+          console.error(
+            `[BootScene] Falha ao carregar mapa inicial "${file.key}" (${file.url}); GameScene usará fallback visual.`,
+          );
+          return;
+        }
         console.error(
           `[BootScene] Falha ao carregar asset "${file.key}" (${file.url}).`,
         );

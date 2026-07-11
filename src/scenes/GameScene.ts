@@ -4,8 +4,8 @@ import { EventBus, GameEvents } from '../core/EventBus';
 import {
   PLAY_WIDTH,
   GAME_HEIGHT,
-  PATH_WIDTH,
   COLORS,
+  TEXTURES,
 } from '../core/constants';
 import { PATH } from '../data/path';
 import { ENEMY_TYPES } from '../data/enemies';
@@ -17,11 +17,11 @@ import { BuildManager } from '../managers/BuildManager';
 import { WaveManager } from '../managers/WaveManager';
 import { DebugOverlay } from '../debug/DebugOverlay';
 
-const DEPTH = { path: 1, enemy: 10, tower: 20, projectile: 30 } as const;
+const DEPTH = { background: 0, enemy: 20, tower: 30, projectile: 40 } as const;
 
 /**
- * Cena de gameplay: desenha o mapa e o caminho, mantém as listas de inimigos,
- * torres e projéteis, e roda o loop principal. Delega construção ao
+ * Cena de gameplay: desenha o mapa, mantém as listas de inimigos, torres e
+ * projéteis, e roda o loop principal. Delega construção ao
  * BuildManager e progressão ao WaveManager.
  */
 export class GameScene extends Phaser.Scene {
@@ -34,6 +34,7 @@ export class GameScene extends Phaser.Scene {
   /** Só instanciado em desenvolvimento (Constitution X). */
   private debug?: DebugOverlay;
   private won = false;
+  private loggedMapFallback = false;
 
   constructor() {
     super('GameScene');
@@ -45,8 +46,7 @@ export class GameScene extends Phaser.Scene {
     this.projectiles = [];
     this.won = false;
 
-    this.drawBackground();
-    this.drawPath();
+    this.drawMapBackground();
 
     this.buildManager = new BuildManager(this, () => this.towers, this.placeTower);
     this.waveManager = new WaveManager(this, this.spawnEnemy, () => this.enemies.length);
@@ -64,25 +64,27 @@ export class GameScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.onShutdown, this);
   }
 
-  private drawBackground(): void {
-    this.add.rectangle(0, 0, PLAY_WIDTH, GAME_HEIGHT, COLORS.background).setOrigin(0).setDepth(0);
-  }
+  private drawMapBackground(): void {
+    if (this.textures.exists(TEXTURES.initialMap)) {
+      this.add
+        .image(0, 0, TEXTURES.initialMap)
+        .setOrigin(0)
+        .setDisplaySize(PLAY_WIDTH, GAME_HEIGHT)
+        .setDepth(DEPTH.background);
+      return;
+    }
 
-  private drawPath(): void {
-    const g = this.add.graphics().setDepth(DEPTH.path);
-    this.strokeAlongPath(g, PATH_WIDTH + 8, COLORS.pathBorder);
-    this.strokeAlongPath(g, PATH_WIDTH, COLORS.path);
-  }
+    this.add
+      .rectangle(0, 0, PLAY_WIDTH, GAME_HEIGHT, COLORS.background)
+      .setOrigin(0)
+      .setDepth(DEPTH.background);
 
-  /** Desenha a trilha com cantos arredondados (linha + discos nos vértices). */
-  private strokeAlongPath(g: Phaser.GameObjects.Graphics, width: number, color: number): void {
-    g.lineStyle(width, color, 1);
-    g.beginPath();
-    g.moveTo(PATH[0].x, PATH[0].y);
-    for (let i = 1; i < PATH.length; i++) g.lineTo(PATH[i].x, PATH[i].y);
-    g.strokePath();
-    g.fillStyle(color, 1);
-    for (const p of PATH) g.fillCircle(p.x, p.y, width / 2);
+    if (!this.loggedMapFallback) {
+      this.loggedMapFallback = true;
+      console.error(
+        `[GameScene] Textura "${TEXTURES.initialMap}" ausente; usando fallback visual do mapa.`,
+      );
+    }
   }
 
   // --- Callbacks fornecidos aos managers/torres ---

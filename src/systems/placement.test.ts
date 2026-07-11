@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { isValidPlacement, type PlacementRequest } from './placement';
+import { PATH_WIDTH } from '../core/constants';
 import type { Point } from '../data/path';
 
 const PATH: Point[] = [
@@ -36,6 +37,31 @@ describe('isValidPlacement', () => {
     // Caminho em y=300; meia-largura 24 + raio 20 = 44 de folga exigida.
     expect(isValidPlacement(base({ y: 340 }))).toBe(false); // dist 40 < 44
     expect(isValidPlacement(base({ y: 345 }))).toBe(true); // dist 45 >= 44
+  });
+
+  it('aplica a largura revisada da estrada como largura total', () => {
+    const radius = 18;
+    const blockedDistance = PATH_WIDTH / 2 + radius - 1;
+    const freeDistance = PATH_WIDTH / 2 + radius;
+
+    expect(
+      isValidPlacement(
+        base({
+          y: 300 + blockedDistance,
+          radius,
+          pathHalfWidth: PATH_WIDTH / 2,
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      isValidPlacement(
+        base({
+          y: 300 + freeDistance,
+          radius,
+          pathHalfWidth: PATH_WIDTH / 2,
+        }),
+      ),
+    ).toBe(true);
   });
 
   it('rejeita fora dos limites do mapa (considerando o raio)', () => {

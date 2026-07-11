@@ -11,8 +11,8 @@ export const GAME_HEIGHT = 720;
 export const STARTING_MONEY = 150;
 export const STARTING_LIVES = 20;
 
-/** Largura (raio) da trilha — usado para desenho e validação de construção. */
-export const PATH_WIDTH = 48;
+/** Largura total da estrada — usada para validação de construção e debug. */
+export const PATH_WIDTH = 55;
 
 /** Altura da barra de HUD no topo (zona reservada, sem construção). */
 export const HUD_HEIGHT = 64;
@@ -21,6 +21,7 @@ export const HUD_HEIGHT = 64;
 export const TEXTURES = {
   circle: 'tex-circle',
   projectile: 'tex-projectile',
+  initialMap: 'map-initial',
   towerCaramelo: 'tower-vira-lata-caramelo',
 } as const;
 
