@@ -11,6 +11,16 @@ export const GAME_HEIGHT = 720;
 export const STARTING_MONEY = 150;
 export const STARTING_LIVES = 20;
 
+/**
+ * Timing do relógio de ondas (fonte de verdade — FR-003/D7). O jogo flui sozinho:
+ * a onda 1 começa após `initialDelaySec` e, entre ondas, há `interWaveSec` de
+ * intervalo. Valores em segundos, consumidos por delta time (sem timers Phaser).
+ */
+export const WAVE_TIMING = {
+  initialDelaySec: 2,
+  interWaveSec: 3,
+} as const;
+
 /** Largura total da estrada — usada para validação de construção e debug. */
 export const PATH_WIDTH = 55;
 
@@ -53,4 +63,7 @@ export const COLORS = {
   cardBorder: 0x44445a,
   startButton: 0x2e7d32,
   startButtonHover: 0x388e3c,
+  // Botão Pausar (âmbar = "pausar"); Continuar reaproveita o verde de startButton.
+  pauseButton: 0xf9a825,
+  pauseButtonHover: 0xffb300,
 } as const;

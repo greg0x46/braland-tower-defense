@@ -1,6 +1,5 @@
 import Phaser from 'phaser';
 import { GameState } from '../core/GameState';
-import { EventBus, GameEvents } from '../core/EventBus';
 import {
   PLAY_WIDTH,
   GAME_HEIGHT,
@@ -33,7 +32,6 @@ export class GameScene extends Phaser.Scene {
   private waveManager!: WaveManager;
   /** Só instanciado em desenvolvimento (Constitution X). */
   private debug?: DebugOverlay;
-  private won = false;
   private loggedMapFallback = false;
 
   constructor() {
@@ -44,14 +42,11 @@ export class GameScene extends Phaser.Scene {
     this.enemies = [];
     this.towers = [];
     this.projectiles = [];
-    this.won = false;
 
     this.drawMapBackground();
 
     this.buildManager = new BuildManager(this, () => this.towers, this.placeTower);
-    this.waveManager = new WaveManager(this, this.spawnEnemy, () => this.enemies.length);
-
-    EventBus.on(GameEvents.GAME_WON, this.onWon, this);
+    this.waveManager = new WaveManager(this.spawnEnemy, () => this.enemies.length);
 
     if (import.meta.env.DEV) {
       this.debug = new DebugOverlay(this, {
@@ -89,10 +84,10 @@ export class GameScene extends Phaser.Scene {
 
   // --- Callbacks fornecidos aos managers/torres ---
 
-  private spawnEnemy = (enemyTypeId: string): void => {
+  private spawnEnemy = (enemyTypeId: string, hp: number): void => {
     const type = ENEMY_TYPES[enemyTypeId];
     if (!type) return;
-    const enemy = new Enemy(this, type, PATH).setDepth(DEPTH.enemy) as Enemy;
+    const enemy = new Enemy(this, type, PATH, hp).setDepth(DEPTH.enemy) as Enemy;
     this.enemies.push(enemy);
   };
 
@@ -114,15 +109,13 @@ export class GameScene extends Phaser.Scene {
     this.projectiles.push(p);
   };
 
-  private onWon = (): void => {
-    this.won = true;
-  };
-
   // --- Loop principal ---
 
   update(_time: number, delta: number): void {
     this.debug?.update();
-    if (GameState.isOver || this.won) return;
+    // Congela tudo quando encerrado ou pausado (US3): entidades, torres,
+    // projéteis e o relógio de ondas param de avançar.
+    if (GameState.isOver || GameState.isPaused) return;
     const dt = delta / 1000;
 
     for (const enemy of this.enemies) enemy.step(dt);
@@ -150,11 +143,10 @@ export class GameScene extends Phaser.Scene {
       return true;
     });
 
-    this.waveManager.update();
+    this.waveManager.update(dt);
   }
 
   private onShutdown(): void {
-    EventBus.off(GameEvents.GAME_WON, this.onWon, this);
     this.buildManager.destroy();
     this.waveManager.destroy();
     this.debug?.destroy();

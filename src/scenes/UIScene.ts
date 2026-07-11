@@ -46,11 +46,10 @@ export class UIScene extends Phaser.Scene {
   private moneyText!: Phaser.GameObjects.Text;
   private livesText!: Phaser.GameObjects.Text;
   private waveText!: Phaser.GameObjects.Text;
-  private startButton!: Button;
+  private pauseButton!: Button;
 
   private cards: TowerCard[] = [];
   private selectedTypeId: string | null = null;
-  private waveActive = false;
 
   constructor() {
     super('UIScene');
@@ -59,7 +58,6 @@ export class UIScene extends Phaser.Scene {
   create(): void {
     this.cards = [];
     this.selectedTypeId = null;
-    this.waveActive = false;
 
     this.buildTopBar();
     this.buildSidebar();
@@ -118,17 +116,16 @@ export class UIScene extends Phaser.Scene {
       this.cards.push(this.buildCard(type, cy));
     });
 
-    this.startButton = this.makeButton(
+    // Mesmo slot: começa como "Iniciar" (partida congelada) e vira Pausar/Continuar.
+    this.pauseButton = this.makeButton(
       SIDEBAR_CX,
       GAME_HEIGHT - 44,
       CARD_WIDTH,
       52,
-      '▶  Iniciar Onda',
+      '▶  Iniciar',
       COLORS.startButton,
       COLORS.startButtonHover,
-      () => {
-        if (!this.waveActive && !GameState.isOver) EventBus.emit(GameEvents.REQUEST_START_WAVE);
-      },
+      () => GameState.togglePause(),
     );
   }
 
@@ -262,6 +259,9 @@ export class UIScene extends Phaser.Scene {
   // --- Ações do HUD ---
 
   private toggleBuild(typeId: string): void {
+    // Congelamento durante a partida: cliques nos cards ignorados quando pausado.
+    // (No setup pré-início a construção é liberada.)
+    if (GameState.isBuildLocked) return;
     const next = this.selectedTypeId === typeId ? null : typeId;
     EventBus.emit(GameEvents.SELECT_TOWER, next);
   }
@@ -295,10 +295,9 @@ export class UIScene extends Phaser.Scene {
     EventBus.on(GameEvents.MONEY_CHANGED, this.onMoney, this);
     EventBus.on(GameEvents.LIVES_CHANGED, this.onLives, this);
     EventBus.on(GameEvents.WAVE_CHANGED, this.onWave, this);
-    EventBus.on(GameEvents.WAVE_STATE_CHANGED, this.onWaveState, this);
+    EventBus.on(GameEvents.PAUSE_STATE_CHANGED, this.onPauseChanged, this);
     EventBus.on(GameEvents.SELECT_TOWER, this.onSelectSync, this);
     EventBus.on(GameEvents.GAME_OVER, this.onGameOver, this);
-    EventBus.on(GameEvents.GAME_WON, this.onGameWon, this);
   }
 
   private onMoney = (money: number): void => {
@@ -314,9 +313,18 @@ export class UIScene extends Phaser.Scene {
     this.waveText.setText(this.waveLabel(wave));
   };
 
-  private onWaveState = (active: boolean): void => {
-    this.waveActive = active;
-    this.setButtonEnabled(this.startButton, !active);
+  /**
+   * Reflete o estado de execução no botão imediatamente (FR-009, SC-005):
+   * "▶ Iniciar" antes do primeiro start, "⏸ Pausar" em jogo, "▶ Continuar" pausado.
+   */
+  private onPauseChanged = (): void => {
+    const button = this.pauseButton;
+    const paused = GameState.isPaused;
+    const label = paused ? (GameState.isStarted ? '▶  Continuar' : '▶  Iniciar') : '⏸  Pausar';
+    button.label.setText(label);
+    button.baseColor = paused ? COLORS.startButton : COLORS.pauseButton;
+    button.hoverColor = paused ? COLORS.startButtonHover : COLORS.pauseButtonHover;
+    button.bg.setFillStyle(button.baseColor);
   };
 
   /** Sincroniza a seleção quando muda fora do card (ex.: após construir). */
@@ -329,12 +337,9 @@ export class UIScene extends Phaser.Scene {
     this.showEndScreen('DERROTA', 'Sua cidade foi tomada!', 0xc62828);
   };
 
-  private onGameWon = (): void => {
-    this.showEndScreen('VITÓRIA!', 'Você defendeu a cidade!', 0x2e7d32);
-  };
-
   private showEndScreen(title: string, subtitle: string, color: number): void {
-    this.setButtonEnabled(this.startButton, false);
+    // Botão Pausar/Continuar fica inerte após o fim de jogo (edge case da spec).
+    this.setButtonEnabled(this.pauseButton, false);
     for (const card of this.cards) card.container.disableInteractive().setAlpha(0.45);
 
     const cx = PLAY_WIDTH / 2;
@@ -384,10 +389,9 @@ export class UIScene extends Phaser.Scene {
     EventBus.off(GameEvents.MONEY_CHANGED, this.onMoney, this);
     EventBus.off(GameEvents.LIVES_CHANGED, this.onLives, this);
     EventBus.off(GameEvents.WAVE_CHANGED, this.onWave, this);
-    EventBus.off(GameEvents.WAVE_STATE_CHANGED, this.onWaveState, this);
+    EventBus.off(GameEvents.PAUSE_STATE_CHANGED, this.onPauseChanged, this);
     EventBus.off(GameEvents.SELECT_TOWER, this.onSelectSync, this);
     EventBus.off(GameEvents.GAME_OVER, this.onGameOver, this);
-    EventBus.off(GameEvents.GAME_WON, this.onGameWon, this);
     this.input.setDefaultCursor('default');
   }
 }

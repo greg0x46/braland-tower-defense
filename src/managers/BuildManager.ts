@@ -48,6 +48,7 @@ export class BuildManager {
   }
 
   private onSelect(towerTypeId: string | null): void {
+    if (GameState.isBuildLocked) return;
     this.selectedType = towerTypeId ? TOWER_TYPES[towerTypeId] : null;
     if (!this.selectedType) {
       this.preview.setVisible(false);
@@ -87,7 +88,7 @@ export class BuildManager {
   }
 
   private onPointerMove(pointer: Phaser.Input.Pointer): void {
-    if (!this.selectedType) return;
+    if (GameState.isBuildLocked || !this.selectedType) return;
     this.refreshPreview(pointer);
   }
 
@@ -119,7 +120,7 @@ export class BuildManager {
   }
 
   private onPointerDown(pointer: Phaser.Input.Pointer): void {
-    if (!this.selectedType) return;
+    if (GameState.isBuildLocked || !this.selectedType) return;
     this.refreshPreview(pointer);
     if (!this.valid) return;
 

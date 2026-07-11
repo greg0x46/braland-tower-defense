@@ -12,12 +12,12 @@ export const GameEvents = {
   MONEY_CHANGED: 'money-changed',
   /** lives: number — vida atualizada. */
   LIVES_CHANGED: 'lives-changed',
-  /** wave: number, total: number — onda atual iniciada. */
+  /** wave: number, total: number — onda atual iniciada (total=0: progressão infinita). */
   WAVE_CHANGED: 'wave-changed',
-  /** (sem payload) — jogador pediu para iniciar a próxima onda. */
-  REQUEST_START_WAVE: 'request-start-wave',
-  /** waveActive: boolean — se há onda em andamento (controla o botão do HUD). */
+  /** waveActive: boolean — se há onda em andamento (indicador opcional de HUD). */
   WAVE_STATE_CHANGED: 'wave-state-changed',
+  /** paused: boolean — estado de pausa global mudou (controla o botão do HUD). */
+  PAUSE_STATE_CHANGED: 'pause-state-changed',
   /** towerTypeId: string | null — torre selecionada no HUD para construir. */
   SELECT_TOWER: 'select-tower',
   /** reward: number — inimigo abatido (economia credita dinheiro). */
@@ -26,6 +26,4 @@ export const GameEvents = {
   ENEMY_LEAKED: 'enemy-leaked',
   /** (sem payload) — vida chegou a zero. */
   GAME_OVER: 'game-over',
-  /** (sem payload) — última onda limpa. */
-  GAME_WON: 'game-won',
 } as const;

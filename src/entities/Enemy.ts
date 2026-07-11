@@ -28,14 +28,15 @@ export class Enemy extends Phaser.GameObjects.Container {
   private readonly hpBarFill: Phaser.GameObjects.Rectangle;
   private readonly hpBarWidth: number;
 
-  constructor(scene: Phaser.Scene, type: EnemyType, path: Point[]) {
+  constructor(scene: Phaser.Scene, type: EnemyType, path: Point[], hpOverride?: number) {
     const start = path[0];
     super(scene, start.x, start.y);
 
     this.def = type;
     this.radius = type.radius;
-    this.maxHp = type.maxHp;
-    this.hp = type.maxHp;
+    // HP escalado pela onda (progressão) quando fornecido; senão o base do roster.
+    this.maxHp = hpOverride ?? type.maxHp;
+    this.hp = this.maxHp;
     this.speed = type.speed;
     this.path = path;
 
