@@ -23,6 +23,11 @@ export const TEXTURES = {
   projectile: 'tex-projectile',
   initialMap: 'map-initial',
   towerCaramelo: 'tower-vira-lata-caramelo',
+  towerCarameloPrepare: 'tower-vira-lata-caramelo-prepare',
+  towerCarameloRun: 'tower-vira-lata-caramelo-run',
+  towerCarameloRunAlt: 'tower-vira-lata-caramelo-run-alt',
+  towerCarameloAttack: 'tower-vira-lata-caramelo-attack',
+  towerCarameloAttackAlt: 'tower-vira-lata-caramelo-attack-alt',
 } as const;
 
 /** Paleta com cara brasileira (verde/amarelo/azul) + apoio. */

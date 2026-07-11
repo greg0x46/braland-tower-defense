@@ -3,6 +3,7 @@ import type { TowerType } from '../data/towers';
 import type { Enemy } from './Enemy';
 import { COLORS } from '../core/constants';
 import { pickMostAdvancedInRange } from '../systems/targeting';
+import { TowerAttackAnimator } from './TowerAttackAnimator';
 
 /**
  * Fator de escala visual do sprite relativo ao `radius` (apresentação, não
@@ -33,6 +34,9 @@ export class Tower extends Phaser.GameObjects.Container {
   private readonly fireInterval: number;
   private readonly fire: FireFn;
   private readonly rangeRing: Phaser.GameObjects.Arc;
+  private readonly visualRoot: Phaser.GameObjects.Container;
+  private readonly spriteVisual?: Phaser.GameObjects.Image;
+  private readonly attackAnimator?: TowerAttackAnimator;
 
   constructor(scene: Phaser.Scene, x: number, y: number, type: TowerType, fire: FireFn) {
     super(scene, x, y);
@@ -50,15 +54,24 @@ export class Tower extends Phaser.GameObjects.Container {
     // ilustração; senão, cai no placeholder círculo + emoji. Apenas o objeto de
     // exibição muda — colisão/alcance/depth continuam derivados de `def`.
     this.add(this.rangeRing);
-    if (type.spriteKey && scene.textures.exists(type.spriteKey)) {
-      this.add(this.buildSprite(scene, type.spriteKey));
-    } else {
-      const body = scene.add.circle(0, 0, this.radius, type.color);
-      body.setStrokeStyle(2, 0x000000, 0.4);
-      const emoji = scene.add
-        .text(0, 0, type.emoji, { fontSize: `${this.radius * 1.4}px` })
-        .setOrigin(0.5);
-      this.add([body, emoji]);
+    const visualDisplayWidth =
+      this.radius * (type.attackAnimation?.visualScale ?? TOWER_SPRITE_SCALE);
+    const visual = this.buildVisual(scene, type, visualDisplayWidth);
+    this.visualRoot = visual.root;
+    this.spriteVisual = visual.sprite;
+    this.add(this.visualRoot);
+
+    if (type.attackAnimation) {
+      this.attackAnimator = new TowerAttackAnimator({
+        scene,
+        definition: type.attackAnimation,
+        visualRoot: this.visualRoot,
+        spriteVisual: this.spriteVisual,
+        spriteDisplayWidth: visualDisplayWidth,
+        idleSpriteKey: type.spriteKey,
+        getOrigin: () => ({ x: this.x, y: this.y }),
+        onFireCue: this.handleFireCue,
+      });
     }
     scene.add.existing(this);
 
@@ -77,23 +90,71 @@ export class Tower extends Phaser.GameObjects.Container {
    * preservando o aspecto real da textura, origem centrada. Nenhuma dimensão
    * daqui alimenta gameplay (colisão/alcance seguem `def`).
    */
-  private buildSprite(scene: Phaser.Scene, spriteKey: string): Phaser.GameObjects.Image {
+  private buildVisual(
+    scene: Phaser.Scene,
+    type: TowerType,
+    displayWidth: number,
+  ): {
+    root: Phaser.GameObjects.Container;
+    sprite?: Phaser.GameObjects.Image;
+  } {
+    const root = scene.add.container(0, 0);
+
+    if (type.spriteKey && scene.textures.exists(type.spriteKey)) {
+      const sprite = this.buildSprite(scene, type.spriteKey, displayWidth);
+      root.add(sprite);
+      return { root, sprite };
+    }
+
+    const body = scene.add.circle(0, 0, this.radius, type.color);
+    body.setStrokeStyle(2, 0x000000, 0.4);
+    const emoji = scene.add
+      .text(0, 0, type.emoji, { fontSize: `${this.radius * 1.4}px` })
+      .setOrigin(0.5);
+    root.add([body, emoji]);
+    return { root };
+  }
+
+  private buildSprite(
+    scene: Phaser.Scene,
+    spriteKey: string,
+    displayWidth: number,
+  ): Phaser.GameObjects.Image {
     const image = scene.add.image(0, 0, spriteKey).setOrigin(0.5);
     const src = image.texture.getSourceImage();
     const aspect = src.height / src.width;
-    const displayWidth = this.radius * TOWER_SPRITE_SCALE;
     image.setDisplaySize(displayWidth, displayWidth * aspect);
     return image;
   }
 
   update(deltaSec: number, enemies: Enemy[]): void {
     if (this.cooldown > 0) this.cooldown -= deltaSec;
+
+    if (this.attackAnimator?.isActive) {
+      const target = this.attackAnimator.activeTarget;
+      if (
+        target &&
+        !this.attackAnimator.hasEmittedFireCue &&
+        !this.isTargetValid(target)
+      ) {
+        this.attackAnimator.cancel();
+        return;
+      }
+
+      this.attackAnimator.update(deltaSec);
+      return;
+    }
+
     if (this.cooldown > 0) return;
 
     const target = this.pickTarget(enemies);
     if (!target) return;
 
-    this.fire(this.x, this.y, target, this.def.damage, this.def.projectileSpeed);
+    if (this.attackAnimator) {
+      if (!this.attackAnimator.start(target)) return;
+    } else {
+      this.fire(this.x, this.y, target, this.def.damage, this.def.projectileSpeed);
+    }
     this.cooldown = this.fireInterval;
   }
 
@@ -102,9 +163,29 @@ export class Tower extends Phaser.GameObjects.Container {
     return pickMostAdvancedInRange(this.x, this.y, this.def.range, enemies);
   }
 
+  private handleFireCue = (target: Enemy): void => {
+    if (!this.isTargetValid(target)) {
+      this.attackAnimator?.cancel();
+      return;
+    }
+    target.takeDamage(this.def.damage);
+  };
+
+  private isTargetValid(target: Enemy): boolean {
+    if (target.status !== 'alive') return false;
+    const dx = target.x - this.x;
+    const dy = target.y - this.y;
+    return dx * dx + dy * dy <= this.def.range * this.def.range;
+  }
+
   /** Anel de alcance também usado como feedback (ex.: destaque). */
   showRange(visible: boolean): void {
     this.rangeRing.setVisible(visible);
     this.rangeRing.setStrokeStyle(1.5, COLORS.rangeValid, 0.6);
+  }
+
+  destroy(fromScene?: boolean): void {
+    this.attackAnimator?.shutdown();
+    super.destroy(fromScene);
   }
 }

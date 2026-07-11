@@ -3,6 +3,11 @@ import { GameState } from '../core/GameState';
 import { TEXTURES } from '../core/constants';
 import initialMapUrl from '../assets/maps/initial-map.png';
 import caramelUrl from '../assets/towers/vira-lata-caramelo.png';
+import caramelPrepareUrl from '../assets/towers/vira-lata-caramelo-waking.png';
+import caramelRunUrl from '../assets/towers/vira-lata-caramelo-running.png';
+import caramelRunAltUrl from '../assets/towers/vira-lata-caramelo-running-1.png';
+import caramelAttackUrl from '../assets/towers/vira-lata-ramelo-atack.png';
+import caramelAttackAltUrl from '../assets/towers/vira-lata-ramelo-atack-2.png';
 
 /**
  * Cena de entrada. Carrega centralmente os sprites das torres (o restante do
@@ -18,6 +23,11 @@ export class BootScene extends Phaser.Scene {
     // Único ponto que conhece o caminho literal do asset (contrato C1).
     this.load.image(TEXTURES.initialMap, initialMapUrl);
     this.load.image(TEXTURES.towerCaramelo, caramelUrl);
+    this.load.image(TEXTURES.towerCarameloPrepare, caramelPrepareUrl);
+    this.load.image(TEXTURES.towerCarameloRun, caramelRunUrl);
+    this.load.image(TEXTURES.towerCarameloRunAlt, caramelRunAltUrl);
+    this.load.image(TEXTURES.towerCarameloAttack, caramelAttackUrl);
+    this.load.image(TEXTURES.towerCarameloAttackAlt, caramelAttackAltUrl);
 
     // Sem erro silencioso: registra a falha e deixa os consumidores caírem no
     // fallback (círculo + emoji). Não relança — o jogo segue jogável (FR-007).
