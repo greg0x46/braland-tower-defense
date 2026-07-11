@@ -38,6 +38,37 @@ export const TEXTURES = {
   towerCarameloRunAlt: 'tower-vira-lata-caramelo-run-alt',
   towerCarameloAttack: 'tower-vira-lata-caramelo-attack',
   towerCarameloAttackAlt: 'tower-vira-lata-caramelo-attack-alt',
+  enemyMotoboy: 'enemy-dois-caras-moto',
+} as const;
+
+/**
+ * Chaves das animações registradas no AnimationManager global (BootScene.create).
+ * Sprite sheets são fatiados no load; a animação em si vive aqui, referenciada
+ * por chave — nunca recriada por instância (contrato de mercado p/ Phaser).
+ */
+export const ANIMS = {
+  motoboyRide: 'motoboy-ride',
+  motoboyShoot: 'motoboy-shoot',
+} as const;
+
+/**
+ * Tunning de orientação do sprite do inimigo (apresentação — não é gameplay,
+ * por isso fica fora de `src/data/`). Consumido pela regra pura
+ * `src/systems/orientation.ts` e pela aplicação no `Enemy`.
+ *
+ * - `tiltDeg`: magnitude da inclinação discreta (subindo −15 / descendo +15).
+ * - `tiltEnterSin`/`tiltExitSin`: limiares (em |ny| normalizado) para entrar em
+ *   inclinado e voltar a plano — `tiltExitSin < tiltEnterSin` cria histerese e
+ *   evita flicker na fronteira.
+ * - `flipDeadzone`: zona neutra de `nx` onde o flip preserva o sentido anterior
+ *   (segmentos ~verticais não trocam o espelhamento nervosamente).
+ */
+const DEG_TO_RAD = Math.PI / 180;
+export const ORIENTATION = {
+  tiltDeg: 15,
+  tiltEnterSin: Math.sin(DEG_TO_RAD * 20),
+  tiltExitSin: Math.sin(DEG_TO_RAD * 17),
+  flipDeadzone: 0.15,
 } as const;
 
 /** Paleta com cara brasileira (verde/amarelo/azul) + apoio. */

@@ -1,4 +1,4 @@
-import { COLORS } from '../core/constants';
+import { COLORS, TEXTURES } from '../core/constants';
 
 /**
  * Configuração de um tipo de inimigo. Estrutura data-driven: adicionar novos
@@ -16,6 +16,8 @@ export interface EnemyType {
   reward: number;
   /** Raio do corpo (para desenho e colisão de projétil). */
   radius: number;
+  /** Chave da textura (sprite sheet). Ausente ⇒ fallback círculo + emoji. */
+  spriteKey?: string;
 }
 
 export const ENEMY_TYPES: Record<string, EnemyType> = {
@@ -27,6 +29,7 @@ export const ENEMY_TYPES: Record<string, EnemyType> = {
     maxHp: 20,
     speed: 200,
     reward: 8,
-    radius: 18,
+    radius: 25,
+    spriteKey: TEXTURES.enemyMotoboy,
   },
 };

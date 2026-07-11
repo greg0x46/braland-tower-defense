@@ -55,9 +55,9 @@ export interface ProgressionProfile {
  * resistência; o intervalo decai suavemente até `minIntervalSec`.
  */
 export const PROGRESSION_PROFILE: ProgressionProfile = {
-  baseCount: 200,
-  countGrowth: 10,
-  baseIntervalSec: 0.1,
+  baseCount: 8,
+  countGrowth: 3,
+  baseIntervalSec: 0.4,
   intervalDecay: 0.03,
   minIntervalSec: 0.35,
   hpGrowthPerWave: 0.12,
