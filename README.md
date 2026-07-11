@@ -18,6 +18,85 @@ Em desenvolvimento, tecle **`` ` ``** (backtick) para ligar/desligar o overlay d
 depuração (FPS, contagem de entidades, caminho, alcance das torres, alvo atual e
 hitboxes). O overlay não existe no build de produção.
 
+## Ajustar sprite sheets geradas por IA
+
+Quando o GPT gerar uma sprite sheet em tamanho irregular, use a imagem como fonte
+bruta e normalize com:
+
+```bash
+npm run adjust:sprite-sheet -- <input> <output> \
+  --source-cols <colunas-originais> \
+  --source-rows <linhas-originais> \
+  --frame-width <largura-final> \
+  --frame-height <altura-final> \
+  --output-cols <colunas-finais>
+```
+
+Exemplo para uma imagem `1774x887` que deveria ser uma sheet `8x2`:
+
+```bash
+npm run adjust:sprite-sheet -- \
+  src/assets/enemies/dois-caras-numa-moto-sheet.png \
+  src/assets/enemies/dois-caras-numa-moto-sheet-fixed.png \
+  --source-cols 8 \
+  --source-rows 2 \
+  --frame-width 256 \
+  --frame-height 512 \
+  --output-cols 8
+```
+
+Esse comando gera uma sheet limpa `2048x1024`, com 16 frames de `256x512`.
+Se substituir o asset usado pelo jogo, o runtime deriva `frameWidth` e
+`frameHeight` do contrato central em `src/core/spriteSheets.ts`; não coloque
+dimensões hardcoded no `BootScene`.
+
+Se a arte de um frame estiver entrando no frame vizinho, use o modo de extração
+por componente principal. Ele recorta a maior ilha alfa de cada célula, remove
+fragmentos vazados do vizinho e recentraliza com margem interna:
+
+```bash
+npm run adjust:sprite-sheet -- \
+  raw/dois-caras-numa-moto-sheet.png \
+  src/assets/enemies/dois-caras-numa-moto-sheet.png \
+  --source-cols 8 \
+  --source-rows 2 \
+  --frame-width 256 \
+  --frame-height 512 \
+  --output-cols 8 \
+  --extract-mode main-component \
+  --component-frame-padding 20 \
+  --preview-grid /tmp/motoboy-grid.png \
+  --validate-frame-edges \
+  --edge-margin 1
+```
+
+Confira o preview com grade antes de substituir o asset final. Nenhuma parte da
+arte deve tocar as linhas vermelhas.
+
+Opções úteis:
+
+- `--fit contain` preserva proporção e centraliza no frame final (padrão).
+- `--fit cover` preenche o frame e corta excesso.
+- `--fit stretch` força o frame ao tamanho final.
+- `--extract-mode main-component` remove pedaços de frames vizinhos quando a
+  arte vazou para fora da célula original.
+- `--component-frame-padding <px>` define a margem interna no modo
+  `main-component`.
+- `--preview-grid <arquivo.png>` gera uma imagem de inspeção com a grade de
+  corte.
+- `--validate-frame-edges` falha se algum frame encostar na borda de corte.
+- `--filter nearest` é melhor para pixel art; `lanczos` é o padrão para arte
+  gerada/pintada.
+- `--trim-alpha <threshold>` remove bordas transparentes de cada célula antes de
+  redimensionar.
+- `--trim-bg <tolerance>` remove um fundo sólido baseado nos cantos da célula.
+
+O script usa Python + Pillow. Se o ambiente não tiver Pillow:
+
+```bash
+python3 -m pip install Pillow
+```
+
 ## Como jogar
 
 1. Clique em **🐕 Vira-lata Caramelo ($50)** no topo para entrar no modo de construção.

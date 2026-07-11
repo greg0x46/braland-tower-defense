@@ -27,9 +27,9 @@ export const ENEMY_TYPES: Record<string, EnemyType> = {
     emoji: '🛵',
     color: COLORS.enemyMoto,
     maxHp: 20,
-    speed: 200,
+    speed: 300,
     reward: 8,
-    radius: 25,
+    radius: 20,
     spriteKey: TEXTURES.enemyMotoboy,
   },
 };

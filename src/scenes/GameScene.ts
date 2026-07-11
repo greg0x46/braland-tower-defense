@@ -42,6 +42,7 @@ export class GameScene extends Phaser.Scene {
     this.enemies = [];
     this.towers = [];
     this.projectiles = [];
+    this.cameras.main.roundPixels = true;
 
     this.drawMapBackground();
 

@@ -2,6 +2,12 @@ import Phaser from 'phaser';
 import type { EnemyType } from '../data/enemies';
 import type { Point } from '../data/path';
 import { COLORS, ANIMS } from '../core/constants';
+import {
+  DEFAULT_RENDER_SHARPNESS,
+  resolveDevicePixelRatio,
+  snapVisualPosition,
+} from '../core/renderSharpness';
+import { MOTOBOY_SPRITE_SHEET } from '../core/spriteSheets';
 import { resolveOrientation, tiltToDegrees } from '../systems/orientation';
 import type { OrientationState } from '../systems/orientation';
 
@@ -28,7 +34,9 @@ export class Enemy extends Phaser.GameObjects.Container {
   status: EnemyStatus = 'alive';
 
   private readonly hpBarFill: Phaser.GameObjects.Rectangle;
+  private readonly hpBarBg: Phaser.GameObjects.Rectangle;
   private readonly hpBarWidth: number;
+  private readonly hpBarY: number;
 
   /** Sprite animado, quando a sheet carregou; null no fallback (círculo+emoji). */
   private readonly sprite: Phaser.GameObjects.Sprite | null;
@@ -52,10 +60,12 @@ export class Enemy extends Phaser.GameObjects.Container {
     const visuals: Phaser.GameObjects.GameObject[] = [];
     if (type.spriteKey && scene.textures.exists(type.spriteKey)) {
       const sprite = scene.add.sprite(0, 0, type.spriteKey).setOrigin(0.5);
-      const src = sprite.texture.getSourceImage();
-      // Ajusta ao raio mantendo a proporção do frame (largura ≈ 2.6×raio).
-      const displayWidth = this.radius * 3.2;
-      sprite.setDisplaySize(displayWidth, displayWidth * (src.height / src.width));
+      const displayWidth =
+        this.radius * MOTOBOY_SPRITE_SHEET.visualScale.displayWidthRadiusMultiplier;
+      sprite.setDisplaySize(
+        displayWidth,
+        displayWidth * (sprite.frame.cutHeight / sprite.frame.cutWidth),
+      );
       // Estado inicial coerente com `orientation` (entra indo p/ a direita).
       // A orientação passa a ser derivada do movimento em step() (US2).
       sprite.setFlipX(this.orientation.flipX);
@@ -73,16 +83,17 @@ export class Enemy extends Phaser.GameObjects.Container {
     }
 
     this.hpBarWidth = this.radius * 2;
-    const barY = -this.radius - 8;
-    const hpBarBg = scene.add
-      .rectangle(0, barY, this.hpBarWidth, 5, COLORS.hpBarBg, 0.6)
+    this.hpBarY = -this.radius - 8;
+    this.hpBarBg = scene.add
+      .rectangle(0, this.hpBarY, this.hpBarWidth, 5, COLORS.hpBarBg, 0.6)
       .setOrigin(0.5);
     this.hpBarFill = scene.add
-      .rectangle(-this.hpBarWidth / 2, barY, this.hpBarWidth, 5, COLORS.hpBarFill)
+      .rectangle(-this.hpBarWidth / 2, this.hpBarY, this.hpBarWidth, 5, COLORS.hpBarFill)
       .setOrigin(0, 0.5);
 
-    this.add([...visuals, hpBarBg, this.hpBarFill]);
+    this.add([...visuals, this.hpBarBg, this.hpBarFill]);
     scene.add.existing(this);
+    this.applyVisualSnap();
   }
 
   /** Avança ao longo do caminho. deltaSec em segundos. */
@@ -115,10 +126,27 @@ export class Enemy extends Phaser.GameObjects.Container {
     }
 
     this.applyOrientation(this.x - startX, this.y - startY);
+    this.applyVisualSnap();
 
     if (this.segmentIndex >= this.path.length - 1) {
       this.status = 'leaked';
     }
+  }
+
+  private applyVisualSnap(): void {
+    if (!this.sprite) return;
+
+    const snap = snapVisualPosition(
+      this,
+      DEFAULT_RENDER_SHARPNESS,
+      resolveDevicePixelRatio(DEFAULT_RENDER_SHARPNESS),
+    );
+    this.sprite.setPosition(snap.offsetX, snap.offsetY);
+    this.hpBarBg.setPosition(snap.offsetX, this.hpBarY + snap.offsetY);
+    this.hpBarFill.setPosition(
+      -this.hpBarWidth / 2 + snap.offsetX,
+      this.hpBarY + snap.offsetY,
+    );
   }
 
   /**

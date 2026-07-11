@@ -1,6 +1,11 @@
 import Phaser from 'phaser';
 import { GameState } from '../core/GameState';
-import { TEXTURES, ANIMS } from '../core/constants';
+import { TEXTURES } from '../core/constants';
+import {
+  formatSpriteSheetErrors,
+  MOTOBOY_SPRITE_SHEET,
+  resolveSpriteSheetSpec,
+} from '../core/spriteSheets';
 import initialMapUrl from '../assets/maps/initial-map.png';
 import motoboySheetUrl from '../assets/enemies/dois-caras-numa-moto-sheet.png';
 import caramelUrl from '../assets/towers/vira-lata-caramelo.png';
@@ -30,13 +35,9 @@ export class BootScene extends Phaser.Scene {
     this.load.image(TEXTURES.towerCarameloAttack, caramelAttackUrl);
     this.load.image(TEXTURES.towerCarameloAttackAlt, caramelAttackAltUrl);
 
-    // Sprite sheet do inimigo: grade uniforme 8×2 (16 frames de 221×443).
-    // Linha 1 = ciclo de pilotar; linha 2 = atirar. Fatiado aqui; a animação é
-    // registrada em create() (ver ANIMS). 1774/8=221, 887/2=443 → 8×2 frames.
-    this.load.spritesheet(TEXTURES.enemyMotoboy, motoboySheetUrl, {
-      frameWidth: 221,
-      frameHeight: 443,
-    });
+    // Carrega a imagem crua; o recorte público só é materializado em create()
+    // após validar a grade contra as dimensões reais do asset.
+    this.load.image(MOTOBOY_SPRITE_SHEET.rawTextureKey, motoboySheetUrl);
 
     // Sem erro silencioso: registra a falha e deixa os consumidores caírem no
     // fallback (círculo + emoji). Não relança — o jogo segue jogável (FR-007).
@@ -49,6 +50,12 @@ export class BootScene extends Phaser.Scene {
           );
           return;
         }
+        if (file.key === MOTOBOY_SPRITE_SHEET.rawTextureKey) {
+          console.error(
+            `[BootScene] Falha ao carregar sprite sheet "${file.key}" (${file.url}); Enemy usará fallback círculo+emoji.`,
+          );
+          return;
+        }
         console.error(
           `[BootScene] Falha ao carregar asset "${file.key}" (${file.url}).`,
         );
@@ -57,10 +64,43 @@ export class BootScene extends Phaser.Scene {
   }
 
   create(): void {
+    this.materializeMotoboySpriteSheet();
     this.registerAnimations();
     GameState.reset();
     this.scene.launch('UIScene');
     this.scene.start('GameScene');
+  }
+
+  private materializeMotoboySpriteSheet(): void {
+    const spec = MOTOBOY_SPRITE_SHEET;
+    if (!this.textures.exists(spec.rawTextureKey)) {
+      console.error(
+        `[BootScene] Sprite sheet crua "${spec.rawTextureKey}" ausente; Enemy usará fallback círculo+emoji.`,
+      );
+      return;
+    }
+
+    const rawTexture = this.textures.get(spec.rawTextureKey);
+    const source = rawTexture.getSourceImage();
+    if (!(source instanceof HTMLImageElement)) {
+      console.error(
+        `[BootScene] Sprite sheet "${spec.rawTextureKey}" não veio de uma imagem HTML; Enemy usará fallback círculo+emoji.`,
+      );
+      return;
+    }
+    const result = resolveSpriteSheetSpec(spec, source.width, source.height);
+
+    if (!result.ok) {
+      if (this.textures.exists(spec.textureKey)) this.textures.remove(spec.textureKey);
+      console.error(`[BootScene] ${formatSpriteSheetErrors(result)}`);
+      return;
+    }
+
+    if (this.textures.exists(spec.textureKey)) this.textures.remove(spec.textureKey);
+    this.textures.addSpriteSheet(spec.textureKey, source, {
+      frameWidth: result.spec.frameWidth,
+      frameHeight: result.spec.frameHeight,
+    });
   }
 
   /**
@@ -68,26 +108,20 @@ export class BootScene extends Phaser.Scene {
    * Só cria se a textura carregou — sem sheet, o inimigo cai no fallback emoji.
    */
   private registerAnimations(): void {
-    if (!this.textures.exists(TEXTURES.enemyMotoboy)) return;
+    const spec = MOTOBOY_SPRITE_SHEET;
+    if (!this.textures.exists(spec.textureKey)) return;
 
-    this.anims.create({
-      key: ANIMS.motoboyRide,
-      frames: this.anims.generateFrameNumbers(TEXTURES.enemyMotoboy, {
-        start: 0,
-        end: 7, // linha 1: ciclo de pilotar
-      }),
-      frameRate: 12,
-      repeat: -1, // loop infinito
-    });
-
-    this.anims.create({
-      key: ANIMS.motoboyShoot,
-      frames: this.anims.generateFrameNumbers(TEXTURES.enemyMotoboy, {
-        start: 8,
-        end: 15, // linha 2: atirar
-      }),
-      frameRate: 14,
-      repeat: 0, // dispara uma vez
-    });
+    for (const animation of spec.animations) {
+      if (this.anims.exists(animation.key)) continue;
+      this.anims.create({
+        key: animation.key,
+        frames: this.anims.generateFrameNumbers(spec.textureKey, {
+          start: animation.start,
+          end: animation.end,
+        }),
+        frameRate: animation.frameRate,
+        repeat: animation.repeat,
+      });
+    }
   }
 }
