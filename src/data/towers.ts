@@ -1,4 +1,4 @@
-import { COLORS } from '../core/constants';
+import { COLORS, TEXTURES } from '../core/constants';
 
 /**
  * Configuração de um tipo de torre. Data-driven: Motoboy e Faria Limer entram
@@ -20,6 +20,8 @@ export interface TowerType {
   projectileSpeed: number;
   /** Raio do corpo (para desenho e validação de sobreposição). */
   radius: number;
+  /** Chave de textura da apresentação. Ausente ⇒ usa fallback (círculo+emoji). */
+  spriteKey?: string;
 }
 
 export const TOWER_TYPES: Record<string, TowerType> = {
@@ -34,5 +36,6 @@ export const TOWER_TYPES: Record<string, TowerType> = {
     fireRate: 2,
     projectileSpeed: 420,
     radius: 20,
+    spriteKey: TEXTURES.towerCaramelo,
   },
 };

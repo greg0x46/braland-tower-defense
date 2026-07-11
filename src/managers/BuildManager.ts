@@ -4,7 +4,7 @@ import { GameState } from '../core/GameState';
 import { PLAY_WIDTH, GAME_HEIGHT, PATH_WIDTH, HUD_HEIGHT, COLORS } from '../core/constants';
 import { PATH } from '../data/path';
 import { TOWER_TYPES, type TowerType } from '../data/towers';
-import type { Tower } from '../entities/Tower';
+import { TOWER_SPRITE_SCALE, type Tower } from '../entities/Tower';
 import { isValidPlacement } from '../systems/placement';
 
 /**
@@ -22,6 +22,7 @@ export class BuildManager {
   private readonly previewBody: Phaser.GameObjects.Arc;
   private readonly previewRange: Phaser.GameObjects.Arc;
   private readonly previewEmoji: Phaser.GameObjects.Text;
+  private previewSprite: Phaser.GameObjects.Image | null = null;
   private valid = false;
 
   constructor(
@@ -54,10 +55,35 @@ export class BuildManager {
     }
     const t = this.selectedType;
     this.previewRange.setRadius(t.range);
-    this.previewBody.setRadius(t.radius);
-    this.previewEmoji.setText(t.emoji).setFontSize(t.radius * 1.4);
+
+    // Espelha a resolução visual da torre (contrato C4): sprite quando existe,
+    // senão corpo + emoji. O anel mantém o feedback de cor válido/inválido.
+    if (t.spriteKey && this.scene.textures.exists(t.spriteKey)) {
+      const sprite = this.ensurePreviewSprite(t.spriteKey);
+      const src = sprite.texture.getSourceImage();
+      const displayWidth = t.radius * TOWER_SPRITE_SCALE;
+      sprite.setDisplaySize(displayWidth, displayWidth * (src.height / src.width)).setVisible(true);
+      this.previewBody.setVisible(false);
+      this.previewEmoji.setVisible(false);
+    } else {
+      if (this.previewSprite) this.previewSprite.setVisible(false);
+      this.previewBody.setRadius(t.radius).setVisible(true);
+      this.previewEmoji.setText(t.emoji).setFontSize(t.radius * 1.4).setVisible(true);
+    }
+
     this.preview.setVisible(true);
     this.refreshPreview(this.scene.input.activePointer);
+  }
+
+  /** Cria (uma vez) e reaproveita a imagem de preview, atualizando a textura. */
+  private ensurePreviewSprite(spriteKey: string): Phaser.GameObjects.Image {
+    if (!this.previewSprite) {
+      this.previewSprite = this.scene.add.image(0, 0, spriteKey).setOrigin(0.5);
+      this.preview.add(this.previewSprite);
+    } else {
+      this.previewSprite.setTexture(spriteKey);
+    }
+    return this.previewSprite;
   }
 
   private onPointerMove(pointer: Phaser.Input.Pointer): void {

@@ -140,9 +140,7 @@ export class UIScene extends Phaser.Scene {
       .rectangle(0, 0, w, h, COLORS.cardBg)
       .setStrokeStyle(2, COLORS.cardBorder);
 
-    const emoji = this.add
-      .text(-w / 2 + 34, 0, type.emoji, { fontSize: '40px' })
-      .setOrigin(0.5);
+    const icon = this.buildCardIcon(type, -w / 2 + 34);
     const name = this.add
       .text(-w / 2 + 68, -h / 2 + 20, type.name, {
         fontSize: '17px',
@@ -162,7 +160,7 @@ export class UIScene extends Phaser.Scene {
       .setOrigin(0, 0.5);
 
     const container = this.add
-      .container(SIDEBAR_CX, cy, [bg, emoji, name, cost, stats])
+      .container(SIDEBAR_CX, cy, [bg, icon, name, cost, stats])
       .setSize(w, h)
       .setDepth(1)
       .setInteractive(
@@ -186,6 +184,24 @@ export class UIScene extends Phaser.Scene {
     });
 
     return card;
+  }
+
+  /**
+   * Ícone do card (contrato C3): sprite escalado ao slot (~40px, aspecto
+   * preservado) quando a textura existe; senão, o emoji atual. Layout do card
+   * (posição/tamanho, nome, custo, stats) permanece inalterado.
+   */
+  private buildCardIcon(type: TowerType, x: number): Phaser.GameObjects.GameObject {
+    const SLOT = 40;
+    if (type.spriteKey && this.textures.exists(type.spriteKey)) {
+      const image = this.add.image(x, 0, type.spriteKey).setOrigin(0.5);
+      const src = image.texture.getSourceImage();
+      // Encaixa a imagem inteira dentro de um quadrado SLOT×SLOT, preservando o aspecto.
+      const scale = SLOT / Math.max(src.width, src.height);
+      image.setDisplaySize(src.width * scale, src.height * scale);
+      return image;
+    }
+    return this.add.text(x, 0, type.emoji, { fontSize: '40px' }).setOrigin(0.5);
   }
 
   private makeButton(

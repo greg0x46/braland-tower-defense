@@ -4,6 +4,13 @@ import type { Enemy } from './Enemy';
 import { COLORS } from '../core/constants';
 import { pickMostAdvancedInRange } from '../systems/targeting';
 
+/**
+ * Fator de escala visual do sprite relativo ao `radius` (apresentação, não
+ * gameplay). Largura de exibição ≈ `radius * TOWER_SPRITE_SCALE`; a altura
+ * preserva o aspecto da imagem. Ajustável sem tocar em nenhuma regra.
+ */
+export const TOWER_SPRITE_SCALE = 3.0;
+
 /** Callback usado pela torre para pedir à cena a criação de um projétil. */
 export type FireFn = (
   x: number,
@@ -39,14 +46,20 @@ export class Tower extends Phaser.GameObjects.Container {
       .setStrokeStyle(1.5, type.color, 0.5)
       .setVisible(false);
 
-    const body = scene.add.circle(0, 0, this.radius, type.color);
-    body.setStrokeStyle(2, 0x000000, 0.4);
-
-    const emoji = scene.add
-      .text(0, 0, type.emoji, { fontSize: `${this.radius * 1.4}px` })
-      .setOrigin(0.5);
-
-    this.add([this.rangeRing, body, emoji]);
+    // Resolução visual (contrato C2): se há sprite carregado, renderiza a
+    // ilustração; senão, cai no placeholder círculo + emoji. Apenas o objeto de
+    // exibição muda — colisão/alcance/depth continuam derivados de `def`.
+    this.add(this.rangeRing);
+    if (type.spriteKey && scene.textures.exists(type.spriteKey)) {
+      this.add(this.buildSprite(scene, type.spriteKey));
+    } else {
+      const body = scene.add.circle(0, 0, this.radius, type.color);
+      body.setStrokeStyle(2, 0x000000, 0.4);
+      const emoji = scene.add
+        .text(0, 0, type.emoji, { fontSize: `${this.radius * 1.4}px` })
+        .setOrigin(0.5);
+      this.add([body, emoji]);
+    }
     scene.add.existing(this);
 
     // Interatividade: mostra o alcance ao passar o mouse sobre a torre.
@@ -57,6 +70,20 @@ export class Tower extends Phaser.GameObjects.Container {
     );
     this.on('pointerover', () => this.rangeRing.setVisible(true));
     this.on('pointerout', () => this.rangeRing.setVisible(false));
+  }
+
+  /**
+   * Cria o objeto de exibição do sprite: largura relativa ao `radius`, altura
+   * preservando o aspecto real da textura, origem centrada. Nenhuma dimensão
+   * daqui alimenta gameplay (colisão/alcance seguem `def`).
+   */
+  private buildSprite(scene: Phaser.Scene, spriteKey: string): Phaser.GameObjects.Image {
+    const image = scene.add.image(0, 0, spriteKey).setOrigin(0.5);
+    const src = image.texture.getSourceImage();
+    const aspect = src.height / src.width;
+    const displayWidth = this.radius * TOWER_SPRITE_SCALE;
+    image.setDisplaySize(displayWidth, displayWidth * aspect);
+    return image;
   }
 
   update(deltaSec: number, enemies: Enemy[]): void {

@@ -21,6 +21,7 @@ export const HUD_HEIGHT = 64;
 export const TEXTURES = {
   circle: 'tex-circle',
   projectile: 'tex-projectile',
+  towerCaramelo: 'tower-vira-lata-caramelo',
 } as const;
 
 /** Paleta com cara brasileira (verde/amarelo/azul) + apoio. */
