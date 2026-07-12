@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { resolveOrientation } from './orientation';
+import {
+  headingVectorToNextWaypoint,
+  resolveOrientation,
+  rotationDegreesForOrientation,
+  spriteFlipXForOrientation,
+} from './orientation';
 import type { OrientationState } from './orientation';
 import { ORIENTATION } from '../core/constants';
 
@@ -90,5 +95,56 @@ describe('invariante central — nunca andar de ré', () => {
       const out = resolveOrientation({ flipX: dx < 0, tilt: 'flat' }, dx, dy);
       expect(out.flipX).toBe(dx > 0);
     }
+  });
+});
+
+describe('headingVectorToNextWaypoint', () => {
+  it('aponta para o próximo waypoint ativo, não para o deslocamento líquido do frame', () => {
+    const path = [
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 0, y: 10 },
+    ];
+
+    const heading = headingVectorToNextWaypoint(path, 1, 8, 2);
+
+    expect(heading).toEqual({ dx: -8, dy: 8 });
+    expect(resolveOrientation(RIGHT, heading.dx, heading.dy).flipX).toBe(false);
+  });
+
+  it('quando está exatamente em um waypoint, já aponta para o seguinte', () => {
+    const path = [
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 0, y: 10 },
+    ];
+
+    expect(headingVectorToNextWaypoint(path, 1, 10, 0)).toEqual({ dx: -10, dy: 10 });
+  });
+
+  it('no fim do trajeto retorna vetor nulo para preservar a orientação atual', () => {
+    const path = [
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+    ];
+
+    expect(headingVectorToNextWaypoint(path, 1, 10, 0)).toEqual({ dx: 0, dy: 0 });
+  });
+});
+
+describe('mapeamento visual da sheet da moto', () => {
+  it('não espelha a sprite quando o estado semântico olha para a direita', () => {
+    expect(spriteFlipXForOrientation(RIGHT)).toBe(false);
+    expect(spriteFlipXForOrientation(LEFT)).toBe(true);
+  });
+
+  it('inclina o nariz para cima ao subir olhando para a direita', () => {
+    expect(rotationDegreesForOrientation({ flipX: true, tilt: 'up' })).toBeLessThan(0);
+    expect(rotationDegreesForOrientation({ flipX: true, tilt: 'down' })).toBeGreaterThan(0);
+  });
+
+  it('inverte o sinal da inclinação quando a sprite está espelhada para a esquerda', () => {
+    expect(rotationDegreesForOrientation({ flipX: false, tilt: 'up' })).toBeGreaterThan(0);
+    expect(rotationDegreesForOrientation({ flipX: false, tilt: 'down' })).toBeLessThan(0);
   });
 });

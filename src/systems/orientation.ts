@@ -9,17 +9,27 @@ import { ORIENTATION } from '../core/constants';
  * histerese (tilt) para não oscilar em fronteiras/segmentos verticais. É
  * determinística: a saída é função apenas do estado anterior e do vetor.
  *
- * A conversão `tilt → graus` e o ajuste de sinal por `flipX` são apresentação
- * (aplicada no `Enemy`); aqui fixamos apenas a semântica `up = subindo`.
+ * A conversão para `Sprite.flipX`/rotação é apresentação; aqui fixamos a
+ * semântica `flipX=true` como "olhando para direita" e `up = subindo`.
  */
 
 export type TiltState = 'up' | 'flat' | 'down';
 
 export interface OrientationState {
-  /** true = olhando p/ direita (a arte-base olha p/ esquerda). */
+  /** true = olhando p/ direita. */
   flipX: boolean;
   /** Estado discreto de inclinação. */
   tilt: TiltState;
+}
+
+export interface HeadingPoint {
+  x: number;
+  y: number;
+}
+
+export interface HeadingVector {
+  dx: number;
+  dy: number;
 }
 
 /**
@@ -62,6 +72,26 @@ export function resolveOrientation(
   return { flipX, tilt };
 }
 
+/**
+ * Calcula o vetor visual do inimigo para o próximo waypoint ativo. Diferente do
+ * deslocamento líquido do frame, isso continua correto quando um step cruza uma
+ * curva e já entra no segmento seguinte.
+ */
+export function headingVectorToNextWaypoint(
+  path: readonly HeadingPoint[],
+  segmentIndex: number,
+  x: number,
+  y: number,
+): HeadingVector {
+  for (let i = segmentIndex + 1; i < path.length; i++) {
+    const dx = path[i].x - x;
+    const dy = path[i].y - y;
+    if (dx !== 0 || dy !== 0) return { dx, dy };
+  }
+
+  return { dx: 0, dy: 0 };
+}
+
 /** Graus de rotação semântica por estado (nariz p/ cima ao subir). */
 export function tiltToDegrees(tilt: TiltState): number {
   switch (tilt) {
@@ -72,4 +102,21 @@ export function tiltToDegrees(tilt: TiltState): number {
     case 'flat':
       return 0;
   }
+}
+
+/**
+ * A sheet atual da moto já olha para a direita; logo o flip visual do Phaser só
+ * deve ser ligado quando o estado semântico olha para a esquerda.
+ */
+export function spriteFlipXForOrientation(state: OrientationState): boolean {
+  return !state.flipX;
+}
+
+/**
+ * Rotação visual em graus para a sheet atual. Ao espelhar para a esquerda, o
+ * sinal da rotação também precisa inverter para manter "up = subindo".
+ */
+export function rotationDegreesForOrientation(state: OrientationState): number {
+  const degrees = tiltToDegrees(state.tilt);
+  return state.flipX ? degrees : -degrees;
 }

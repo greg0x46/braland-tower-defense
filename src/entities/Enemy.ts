@@ -8,7 +8,12 @@ import {
   snapVisualPosition,
 } from '../core/renderSharpness';
 import { MOTOBOY_SPRITE_SHEET } from '../core/spriteSheets';
-import { resolveOrientation, tiltToDegrees } from '../systems/orientation';
+import {
+  headingVectorToNextWaypoint,
+  rotationDegreesForOrientation,
+  resolveOrientation,
+  spriteFlipXForOrientation,
+} from '../systems/orientation';
 import type { OrientationState } from '../systems/orientation';
 
 export type EnemyStatus = 'alive' | 'dead' | 'leaked';
@@ -68,7 +73,7 @@ export class Enemy extends Phaser.GameObjects.Container {
       );
       // Estado inicial coerente com `orientation` (entra indo p/ a direita).
       // A orientação passa a ser derivada do movimento em step() (US2).
-      sprite.setFlipX(this.orientation.flipX);
+      sprite.setFlipX(spriteFlipXForOrientation(this.orientation));
       sprite.play(ANIMS.motoboyRide);
       visuals.push(sprite);
       this.sprite = sprite;
@@ -100,11 +105,6 @@ export class Enemy extends Phaser.GameObjects.Container {
   step(deltaSec: number): void {
     if (this.status !== 'alive') return;
 
-    // Vetor de deslocamento do frame (net) → orienta o sprite (US2), evitando
-    // re-ler o path. Vetor nulo preserva a orientação (histerese).
-    const startX = this.x;
-    const startY = this.y;
-
     let remaining = this.speed * deltaSec;
     while (remaining > 0 && this.segmentIndex < this.path.length - 1) {
       const target = this.path[this.segmentIndex + 1];
@@ -125,7 +125,8 @@ export class Enemy extends Phaser.GameObjects.Container {
       }
     }
 
-    this.applyOrientation(this.x - startX, this.y - startY);
+    const heading = headingVectorToNextWaypoint(this.path, this.segmentIndex, this.x, this.y);
+    this.applyOrientation(heading.dx, heading.dy);
     this.applyVisualSnap();
 
     if (this.segmentIndex >= this.path.length - 1) {
@@ -158,15 +159,13 @@ export class Enemy extends Phaser.GameObjects.Container {
     if (!this.sprite) return;
 
     const next = resolveOrientation(this.orientation, dx, dy);
-    if (next.flipX !== this.orientation.flipX) {
-      this.sprite.setFlipX(next.flipX);
+    const flipChanged = next.flipX !== this.orientation.flipX;
+    const tiltChanged = next.tilt !== this.orientation.tilt;
+    if (flipChanged) {
+      this.sprite.setFlipX(spriteFlipXForOrientation(next));
     }
-    if (next.tilt !== this.orientation.tilt) {
-      // "Nariz p/ cima ao subir" nos dois sentidos: quando espelhado, a rotação
-      // visual inverte, então compensamos o sinal pelo flipX (research D3/D6).
-      const deg = tiltToDegrees(next.tilt);
-      const signed = next.flipX ? -deg : deg;
-      this.sprite.setRotation(Phaser.Math.DegToRad(signed));
+    if (flipChanged || tiltChanged) {
+      this.sprite.setRotation(Phaser.Math.DegToRad(rotationDegreesForOrientation(next)));
     }
     this.orientation = next;
   }
