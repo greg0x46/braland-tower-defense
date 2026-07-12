@@ -34,19 +34,28 @@ export const ACCEPTED_CONTRACTS = {
   'enemy.dois-caras-moto.base-stats': {
     id: 'enemy.dois-caras-moto.base-stats',
     subject: 'enemy',
-    acceptedValues: { maxHp: 20, speed: 90, reward: 8, radius: 25 },
+    acceptedValues: { maxHp: 20, speed: 90, reward: 8, radius: 20 },
     reason:
       'A 90 px/s o motoboy passa ~2,3 s dentro do alcance de uma torre bem ' +
       'posicionada (o alcance de 120 px cobre ~208 px de pista). O Caramelo ' +
       'precisa de 2,0 s para derrubar os 20 HP (5 de dano a 2 mordidas/s), entao ' +
       'uma torre sozinha CONSEGUE abater — a economia fecha e o loop funciona. ' +
-      'radius 25 casa com o corpo do sprite da moto.',
+      'radius 20 dimensiona o sprite da moto (a largura exibida e radius x ' +
+      'displayWidthRadiusMultiplier) e a barra de HP; em gameplay ele so pesa no ' +
+      'teste de acerto de ataques em area, que nenhuma torre atual usa (as duas ' +
+      'sao direct/projectile). Se entrar uma torre de area, este numero volta a ' +
+      'ser balanceamento e precisa de playtest.',
     changedBy:
       '007-technical-debt-hardening: a velocidade tinha virado 200 na 004 (ondas ' +
       'infinitas) e 300 na 006 (nitidez de sprites — um commit visual mexendo em ' +
       'gameplay). A 200+ o inimigo atravessa o alcance em ~1 s: a torre nunca ' +
       'completa o abate e o jogador nao ganha dinheiro. Playtest confirmou; ' +
-      'restaurado o valor do MVP (90), que e o unico faixa em que o combate fecha.',
+      'restaurado o valor do MVP (90), que e o unico faixa em que o combate fecha. ' +
+      'radius: 25 -> 20, aceitando o valor que a 95e5a99 (generalizacao de animacao ' +
+      '+ Mae de Havaianas) ja tinha posto no runtime ao reajustar o tamanho do ' +
+      'sprite. O portao pegou a divergencia como devia; o valor foi aceito porque ' +
+      'hoje o radius do inimigo e presentacional (nenhuma torre de area), nao ' +
+      'porque o teste incomodava.',
   },
   'tower.vira-lata-caramelo.base-stats': {
     id: 'tower.vira-lata-caramelo.base-stats',
