@@ -66,11 +66,26 @@ export class BuildManager {
 
     // Espelha a resolução visual da torre (contrato C4): sprite quando existe,
     // senão corpo + emoji. O anel mantém o feedback de cor válido/inválido.
-    if (t.spriteKey && this.scene.textures.exists(t.spriteKey)) {
-      const sprite = this.ensurePreviewSprite(t.spriteKey);
-      const src = sprite.texture.getSourceImage();
+    if (t.spriteFrame && this.scene.textures.exists(t.spriteFrame.textureKey)) {
+      const sprite = this.ensurePreviewSprite(t.spriteFrame.textureKey, t.spriteFrame.frame);
       const displayWidth = t.radius * TOWER_SPRITE_SCALE;
-      sprite.setDisplaySize(displayWidth, displayWidth * (src.height / src.width)).setVisible(true);
+      sprite
+        .setDisplaySize(
+          displayWidth,
+          displayWidth * (sprite.frame.realHeight / sprite.frame.realWidth),
+        )
+        .setVisible(true);
+      this.previewBody.setVisible(false);
+      this.previewEmoji.setVisible(false);
+    } else if (t.spriteKey && this.scene.textures.exists(t.spriteKey)) {
+      const sprite = this.ensurePreviewSprite(t.spriteKey);
+      const displayWidth = t.radius * TOWER_SPRITE_SCALE;
+      sprite
+        .setDisplaySize(
+          displayWidth,
+          displayWidth * (sprite.frame.realHeight / sprite.frame.realWidth),
+        )
+        .setVisible(true);
       this.previewBody.setVisible(false);
       this.previewEmoji.setVisible(false);
     } else {
@@ -84,12 +99,12 @@ export class BuildManager {
   }
 
   /** Cria (uma vez) e reaproveita a imagem de preview, atualizando a textura. */
-  private ensurePreviewSprite(spriteKey: string): Phaser.GameObjects.Image {
+  private ensurePreviewSprite(spriteKey: string, frame?: string | number): Phaser.GameObjects.Image {
     if (!this.previewSprite) {
-      this.previewSprite = this.scene.add.image(0, 0, spriteKey).setOrigin(0.5);
+      this.previewSprite = this.scene.add.image(0, 0, spriteKey, frame).setOrigin(0.5);
       this.preview.add(this.previewSprite);
     } else {
-      this.previewSprite.setTexture(spriteKey);
+      this.previewSprite.setTexture(spriteKey, frame);
     }
     return this.previewSprite;
   }

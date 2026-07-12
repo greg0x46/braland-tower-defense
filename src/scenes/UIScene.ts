@@ -391,12 +391,17 @@ export class UIScene extends Phaser.Scene {
    */
   private buildCardIcon(type: TowerType, x: number): Phaser.GameObjects.GameObject {
     const SLOT = 40;
+    if (type.spriteFrame && this.textures.exists(type.spriteFrame.textureKey)) {
+      const image = this.add.image(x, 0, type.spriteFrame.textureKey, type.spriteFrame.frame).setOrigin(0.5);
+      const scale = SLOT / Math.max(image.frame.realWidth, image.frame.realHeight);
+      image.setDisplaySize(image.frame.realWidth * scale, image.frame.realHeight * scale);
+      return image;
+    }
     if (type.spriteKey && this.textures.exists(type.spriteKey)) {
       const image = this.add.image(x, 0, type.spriteKey).setOrigin(0.5);
-      const src = image.texture.getSourceImage();
       // Encaixa a imagem inteira dentro de um quadrado SLOT×SLOT, preservando o aspecto.
-      const scale = SLOT / Math.max(src.width, src.height);
-      image.setDisplaySize(src.width * scale, src.height * scale);
+      const scale = SLOT / Math.max(image.frame.realWidth, image.frame.realHeight);
+      image.setDisplaySize(image.frame.realWidth * scale, image.frame.realHeight * scale);
       return image;
     }
     return this.add.text(x, 0, type.emoji, { fontSize: '40px' }).setOrigin(0.5);

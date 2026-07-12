@@ -43,9 +43,10 @@ export const AUDIO = {
  * dano, cadencia, encadeamento ou retorno.
  */
 export const ENGAGEMENT_FALLBACK = {
-  prepareSec: 0.12,
+  standUpSec: 0.12,
   strikeSec: 0.16,
   cueAtSec: 0,
+  lieDownSec: 0,
   pursuitSpeedPxPerSec: 520,
   arrivalDistancePx: 22,
 } as const;
@@ -61,6 +62,7 @@ export const TEXTURES = {
   towerCarameloRunAlt: 'tower-vira-lata-caramelo-run-alt',
   towerCarameloAttack: 'tower-vira-lata-caramelo-attack',
   towerCarameloAttackAlt: 'tower-vira-lata-caramelo-attack-alt',
+  towerCarameloSheet: 'tower-vira-lata-caramelo-sheet',
   enemyMotoboy: 'enemy-dois-caras-moto',
 } as const;
 
@@ -72,6 +74,10 @@ export const TEXTURES = {
 export const ANIMS = {
   motoboyRide: 'motoboy-ride',
   motoboyShoot: 'motoboy-shoot',
+  carameloStandingUp: 'caramelo-standing-up',
+  carameloChasing: 'caramelo-chasing',
+  carameloBiting: 'caramelo-biting',
+  carameloLyingDown: 'caramelo-lying-down',
 } as const;
 
 /**

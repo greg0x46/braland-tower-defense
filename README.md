@@ -73,6 +73,30 @@ npm run adjust:sprite-sheet -- \
 Confira o preview com grade antes de substituir o asset final. Nenhuma parte da
 arte deve tocar as linhas vermelhas.
 
+Para o Vira-lata Caramelo, a fonte bruta na raiz do projeto é uma PNG RGB com
+checkerboard desenhado (`1774x887`, grade visual `8x4`). Gere a sheet final
+`2048x1024` (`32` frames de `256x256`) com alpha real assim:
+
+```bash
+npm run adjust:sprite-sheet -- \
+  "ChatGPT Image Jul 12, 2026, 01_14_06 AM.png" \
+  src/assets/towers/vira-lata-caramelo-sheet.png \
+  --source-cols 8 \
+  --source-rows 4 \
+  --frame-width 256 \
+  --frame-height 256 \
+  --output-cols 8 \
+  --transparent-checkerboard \
+  --extract-mode main-component \
+  --component-frame-padding 18 \
+  --preview-grid /tmp/caramelo-grid.png \
+  --validate-frame-edges \
+  --edge-margin 1
+```
+
+Use `--transparent-checkerboard` quando o "fundo transparente" vier como
+checkerboard RGB conectado às bordas, não como canal alpha.
+
 Opções úteis:
 
 - `--fit contain` preserva proporção e centraliza no frame final (padrão).
@@ -90,6 +114,8 @@ Opções úteis:
 - `--trim-alpha <threshold>` remove bordas transparentes de cada célula antes de
   redimensionar.
 - `--trim-bg <tolerance>` remove um fundo sólido baseado nos cantos da célula.
+- `--transparent-checkerboard` remove checkerboard RGB claro conectado às bordas
+  antes do recorte/extração.
 
 O script usa Python + Pillow. Se o ambiente não tiver Pillow:
 

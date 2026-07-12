@@ -83,13 +83,14 @@ export class Tower extends Phaser.GameObjects.Container {
     this.add(this.visualRoot);
 
     if (type.attackAnimation) {
-      this.attackAnimator = new TowerAttackAnimator({
+    this.attackAnimator = new TowerAttackAnimator({
         scene,
         definition: type.attackAnimation,
         visualRoot: this.visualRoot,
         spriteVisual: this.spriteVisual,
         spriteDisplayWidth: visualDisplayWidth,
         idleSpriteKey: type.spriteKey,
+        idleFrame: type.attackAnimation.idleFrame ?? type.spriteFrame,
       });
     }
     scene.add.existing(this);
@@ -119,6 +120,12 @@ export class Tower extends Phaser.GameObjects.Container {
   } {
     const root = scene.add.container(0, 0);
 
+    if (type.spriteFrame && scene.textures.exists(type.spriteFrame.textureKey)) {
+      const sprite = this.buildSprite(scene, type.spriteFrame.textureKey, displayWidth, type.spriteFrame.frame);
+      root.add(sprite);
+      return { root, sprite };
+    }
+
     if (type.spriteKey && scene.textures.exists(type.spriteKey)) {
       const sprite = this.buildSprite(scene, type.spriteKey, displayWidth);
       root.add(sprite);
@@ -138,10 +145,10 @@ export class Tower extends Phaser.GameObjects.Container {
     scene: Phaser.Scene,
     spriteKey: string,
     displayWidth: number,
+    frame?: string | number,
   ): Phaser.GameObjects.Image {
-    const image = scene.add.image(0, 0, spriteKey).setOrigin(0.5);
-    const src = image.texture.getSourceImage();
-    const aspect = src.height / src.width;
+    const image = scene.add.image(0, 0, spriteKey, frame).setOrigin(0.5);
+    const aspect = image.frame.realHeight / image.frame.realWidth;
     image.setDisplaySize(displayWidth, displayWidth * aspect);
     return image;
   }

@@ -1,14 +1,16 @@
 import Phaser from 'phaser';
 import type {
   AttackAnimationDefinition,
+  AttackAnimationStageName,
   AttackAnimationStage,
   AttackTarget,
   SpriteFrameRef,
 } from '../data/towers';
 import type { Origin } from '../systems/combat';
 import type { EngagementState } from '../systems/engagement';
+import { animationFrameIndexAt } from '../systems/animationFrames';
 
-type StageName = 'prepare' | 'run' | 'attack';
+const ORIENTATION_DEADZONE_PX = 2;
 
 export interface TowerAttackAnimatorOptions {
   scene: Phaser.Scene;
@@ -17,6 +19,7 @@ export interface TowerAttackAnimatorOptions {
   spriteVisual?: Phaser.GameObjects.Image;
   spriteDisplayWidth: number;
   idleSpriteKey?: string;
+  idleFrame?: SpriteFrameRef;
 }
 
 export class TowerAttackAnimator {
@@ -26,12 +29,14 @@ export class TowerAttackAnimator {
   private readonly spriteVisual?: Phaser.GameObjects.Image;
   private readonly spriteDisplayWidth: number;
   private readonly idleSpriteKey?: string;
+  private readonly idleFrame?: SpriteFrameRef;
   private readonly loggedMissingFrames = new Set<string>();
   private readonly loggedMissingStages = new Set<string>();
 
-  private stageName: StageName | null = null;
+  private stageName: AttackAnimationStageName | null = null;
   private frameIndex = -1;
   private currentFrames: SpriteFrameRef[] = [];
+  private facingX: 1 | -1 = 1;
 
   constructor(options: TowerAttackAnimatorOptions) {
     this.scene = options.scene;
@@ -40,6 +45,7 @@ export class TowerAttackAnimator {
     this.spriteVisual = options.spriteVisual;
     this.spriteDisplayWidth = options.spriteDisplayWidth;
     this.idleSpriteKey = options.idleSpriteKey;
+    this.idleFrame = options.idleFrame;
     this.resetVisual();
   }
 
@@ -68,21 +74,26 @@ export class TowerAttackAnimator {
     this.displayFrame(this.frameIndexFor(stage, state.phaseElapsedSec));
   }
 
-  private stageForPhase<T extends AttackTarget>(state: EngagementState<T>): StageName | null {
+  private stageForPhase<T extends AttackTarget>(
+    state: EngagementState<T>,
+  ): AttackAnimationStageName {
     switch (state.phase.kind) {
-      case 'idle':
-        return null;
-      case 'preparing':
-        return 'prepare';
-      case 'pursuing':
+      case 'lying_idle':
+        return 'lying_idle';
+      case 'standing_up':
+        return 'standing_up';
+      case 'chasing':
+        return 'chasing';
+      case 'biting':
+        return 'biting';
       case 'returning':
-        return 'run';
-      case 'striking':
-        return 'attack';
+        return 'returning';
+      case 'lying_down':
+        return 'lying_down';
     }
   }
 
-  private resolveStage(name: StageName): AttackAnimationStage | null {
+  private resolveStage(name: AttackAnimationStageName): AttackAnimationStage | null {
     return this.definition.stages.find((stage) => stage.name === name) ?? null;
   }
 
@@ -95,27 +106,27 @@ export class TowerAttackAnimator {
         continue;
       }
 
-      const logKey = `${this.definition.id}:${stage.name}:${frame.textureKey}`;
+      const logKey = this.frameLogKey(stage.name, frame);
       if (!this.loggedMissingFrames.has(logKey)) {
         this.loggedMissingFrames.add(logKey);
         console.error(
-          `[TowerAttackAnimator] Animation "${this.definition.id}" stage "${stage.name}" missing texture "${frame.textureKey}".`,
+          `[TowerAttackAnimator] Animation "${this.definition.id}" stage "${stage.name}" missing texture "${this.frameLabel(frame)}".`,
         );
       }
     }
 
     if (frames.length > 0) return frames;
 
-    const fallbackKey = this.resolveFallbackTextureKey();
-    if (fallbackKey) {
+    const fallbackFrame = this.resolveFallbackFrame();
+    if (fallbackFrame) {
       const stageKey = `${this.definition.id}:${stage.name}:fallback`;
       if (!this.loggedMissingStages.has(stageKey)) {
         this.loggedMissingStages.add(stageKey);
         console.error(
-          `[TowerAttackAnimator] Animation "${this.definition.id}" stage "${stage.name}" has no valid frames; using fallback texture "${fallbackKey}".`,
+          `[TowerAttackAnimator] Animation "${this.definition.id}" stage "${stage.name}" has no valid frames; using fallback texture "${this.frameLabel(fallbackFrame)}".`,
         );
       }
-      return [{ textureKey: fallbackKey, label: 'fallback' }];
+      return [fallbackFrame];
     }
 
     const stageKey = `${this.definition.id}:${stage.name}:placeholder`;
@@ -128,21 +139,25 @@ export class TowerAttackAnimator {
     return [];
   }
 
-  private resolveFallbackTextureKey(): string | null {
+  private resolveFallbackFrame(): SpriteFrameRef | null {
+    if (this.idleFrame && this.scene.textures.exists(this.idleFrame.textureKey)) {
+      return this.idleFrame;
+    }
+
     if (
       this.definition.fallbackSpriteKey &&
       this.scene.textures.exists(this.definition.fallbackSpriteKey)
     ) {
-      return this.definition.fallbackSpriteKey;
+      return { textureKey: this.definition.fallbackSpriteKey, label: 'fallback' };
     }
 
     if (this.idleSpriteKey && this.scene.textures.exists(this.idleSpriteKey)) {
-      return this.idleSpriteKey;
+      return { textureKey: this.idleSpriteKey, label: 'idle fallback' };
     }
 
     for (const stage of this.definition.stages) {
       for (const frame of stage.frames) {
-        if (this.scene.textures.exists(frame.textureKey)) return frame.textureKey;
+        if (this.scene.textures.exists(frame.textureKey)) return frame;
       }
     }
 
@@ -150,12 +165,12 @@ export class TowerAttackAnimator {
   }
 
   private frameIndexFor(stage: AttackAnimationStage, phaseElapsedSec: number): number {
-    const frameCount = Math.max(1, this.currentFrames.length);
-    const frameDurationMs = Math.max(1, stage.frameDurationMs);
-    const rawIndex = Math.floor((phaseElapsedSec * 1000) / frameDurationMs);
-
-    if (stage.kind === 'loopUntilArrival') return rawIndex % frameCount;
-    return Math.min(rawIndex, frameCount - 1);
+    return animationFrameIndexAt(
+      stage.kind,
+      this.currentFrames.length,
+      stage.frameDurationMs,
+      phaseElapsedSec,
+    );
   }
 
   private displayFrame(index: number): void {
@@ -164,35 +179,41 @@ export class TowerAttackAnimator {
 
     const frame = this.currentFrames[index];
     if (!frame || !this.spriteVisual) return;
-    this.spriteVisual.setTexture(frame.textureKey);
+    this.spriteVisual.setTexture(frame.textureKey, frame.frame);
     this.applySpriteDisplaySize();
   }
 
   private applySpriteDisplaySize(): void {
     if (!this.spriteVisual) return;
-    const src = this.spriteVisual.texture.getSourceImage();
-    const aspect = src.height / src.width;
+    const aspect = this.spriteVisual.frame.realHeight / this.spriteVisual.frame.realWidth;
     this.spriteVisual.setDisplaySize(this.spriteDisplayWidth, this.spriteDisplayWidth * aspect);
   }
 
   private applyOrientation<T extends AttackTarget>(state: EngagementState<T>, base: Origin): void {
     const point = this.orientationPoint(state, base);
-    const direction = point.x >= state.x ? 1 : -1;
-    this.visualRoot.setScale(direction, 1);
+    if (!point) {
+      this.visualRoot.setScale(this.facingX, 1);
+      return;
+    }
+    const dx = point.x - state.x;
+    if (Math.abs(dx) > ORIENTATION_DEADZONE_PX) this.facingX = dx >= 0 ? 1 : -1;
+    this.visualRoot.setScale(this.facingX, 1);
   }
 
   private orientationPoint<T extends AttackTarget>(
     state: EngagementState<T>,
     base: Origin,
-  ): Origin {
+  ): Origin | null {
     switch (state.phase.kind) {
-      case 'preparing':
-      case 'pursuing':
-      case 'striking':
+      case 'standing_up':
+      case 'chasing':
+      case 'biting':
         return state.phase.target;
       case 'returning':
-      case 'idle':
         return base;
+      case 'lying_down':
+      case 'lying_idle':
+        return null;
     }
   }
 
@@ -200,11 +221,31 @@ export class TowerAttackAnimator {
     this.stageName = null;
     this.frameIndex = -1;
     this.currentFrames = [];
+    this.facingX = 1;
     this.visualRoot.setPosition(0, 0);
     this.visualRoot.setScale(1, 1);
-    if (this.spriteVisual && this.idleSpriteKey && this.scene.textures.exists(this.idleSpriteKey)) {
-      this.spriteVisual.setTexture(this.idleSpriteKey);
+    const idleFrame = this.resolveIdleFrame();
+    if (this.spriteVisual && idleFrame) {
+      this.spriteVisual.setTexture(idleFrame.textureKey, idleFrame.frame);
       this.applySpriteDisplaySize();
     }
+  }
+
+  private resolveIdleFrame(): SpriteFrameRef | null {
+    if (this.idleFrame && this.scene.textures.exists(this.idleFrame.textureKey)) {
+      return this.idleFrame;
+    }
+    if (this.idleSpriteKey && this.scene.textures.exists(this.idleSpriteKey)) {
+      return { textureKey: this.idleSpriteKey, label: 'idle fallback' };
+    }
+    return null;
+  }
+
+  private frameLogKey(stageName: string, frame: SpriteFrameRef): string {
+    return `${this.definition.id}:${stageName}:${this.frameLabel(frame)}`;
+  }
+
+  private frameLabel(frame: SpriteFrameRef): string {
+    return frame.frame === undefined ? frame.textureKey : `${frame.textureKey}:${frame.frame}`;
   }
 }

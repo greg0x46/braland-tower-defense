@@ -63,6 +63,24 @@ export const MOTOBOY_SPRITE_SHEET: SpriteSheetSpec = {
   },
 } as const;
 
+export const CARAMELO_SPRITE_SHEET: SpriteSheetSpec = {
+  rawTextureKey: `${TEXTURES.towerCarameloSheet}-raw`,
+  textureKey: TEXTURES.towerCarameloSheet,
+  columns: 8,
+  rows: 4,
+  animations: [
+    { key: ANIMS.carameloStandingUp, start: 10, end: 15, frameRate: 12, repeat: 0 },
+    { key: ANIMS.carameloChasing, start: 16, end: 23, frameRate: 14, repeat: -1 },
+    { key: ANIMS.carameloBiting, start: 25, end: 29, frameRate: 14, repeat: 0 },
+    { key: ANIMS.carameloLyingDown, start: 8, end: 15, frameRate: 12, repeat: 0 },
+  ],
+  visualScale: {
+    displayWidthRadiusMultiplier: 3,
+    preserveFrameAspectRatio: true,
+    origin: { x: 0.5, y: 0.5 },
+  },
+} as const;
+
 export function resolveSpriteSheetSpec(
   spec: SpriteSheetSpec,
   imageWidth: number,

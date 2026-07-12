@@ -3,6 +3,7 @@ import { GameState } from '../core/GameState';
 import { TEXTURES } from '../core/constants';
 import { MusicManager } from '../managers/MusicManager';
 import {
+  CARAMELO_SPRITE_SHEET,
   formatSpriteSheetErrors,
   MOTOBOY_SPRITE_SHEET,
   resolveSpriteSheetSpec,
@@ -10,11 +11,7 @@ import {
 import initialMapUrl from '../assets/maps/initial-map.png';
 import motoboySheetUrl from '../assets/enemies/dois-caras-numa-moto-sheet.png';
 import caramelUrl from '../assets/towers/vira-lata-caramelo.png';
-import caramelPrepareUrl from '../assets/towers/vira-lata-caramelo-waking.png';
-import caramelRunUrl from '../assets/towers/vira-lata-caramelo-running.png';
-import caramelRunAltUrl from '../assets/towers/vira-lata-caramelo-running-1.png';
-import caramelAttackUrl from '../assets/towers/vira-lata-ramelo-atack.png';
-import caramelAttackAltUrl from '../assets/towers/vira-lata-ramelo-atack-2.png';
+import caramelSheetUrl from '../assets/towers/vira-lata-caramelo-sheet.png';
 
 /**
  * Cena de entrada. Carrega centralmente os sprites das torres (o restante do
@@ -39,11 +36,7 @@ export class BootScene extends Phaser.Scene {
     // Único ponto que conhece o caminho literal do asset (contrato C1).
     this.loadImage(TEXTURES.initialMap, initialMapUrl);
     this.loadImage(TEXTURES.towerCaramelo, caramelUrl);
-    this.loadImage(TEXTURES.towerCarameloPrepare, caramelPrepareUrl);
-    this.loadImage(TEXTURES.towerCarameloRun, caramelRunUrl);
-    this.loadImage(TEXTURES.towerCarameloRunAlt, caramelRunAltUrl);
-    this.loadImage(TEXTURES.towerCarameloAttack, caramelAttackUrl);
-    this.loadImage(TEXTURES.towerCarameloAttackAlt, caramelAttackAltUrl);
+    this.loadImage(CARAMELO_SPRITE_SHEET.rawTextureKey, caramelSheetUrl);
 
     // Carrega a imagem crua; o recorte público só é materializado em create()
     // após validar a grade contra as dimensões reais do asset.
@@ -71,6 +64,12 @@ export class BootScene extends Phaser.Scene {
           );
           return;
         }
+        if (file.key === CARAMELO_SPRITE_SHEET.rawTextureKey) {
+          console.error(
+            `[BootScene] Falha ao carregar sprite sheet "${file.key}" (${file.url}); Vira-lata Caramelo usará fallback visual jogável.`,
+          );
+          return;
+        }
         console.error(
           `[BootScene] Falha ao carregar asset "${file.key}" (${file.url}).`,
         );
@@ -86,6 +85,7 @@ export class BootScene extends Phaser.Scene {
 
   create(): void {
     this.materializeMotoboySpriteSheet();
+    this.materializeCarameloSpriteSheet();
     this.registerAnimations();
     this.startBackgroundMusic();
     GameState.reset();
@@ -127,6 +127,38 @@ export class BootScene extends Phaser.Scene {
     if (!(source instanceof HTMLImageElement)) {
       console.error(
         `[BootScene] Sprite sheet "${spec.rawTextureKey}" não veio de uma imagem HTML; Enemy usará fallback círculo+emoji.`,
+      );
+      return;
+    }
+    const result = resolveSpriteSheetSpec(spec, source.width, source.height);
+
+    if (!result.ok) {
+      if (this.textures.exists(spec.textureKey)) this.textures.remove(spec.textureKey);
+      console.error(`[BootScene] ${formatSpriteSheetErrors(result)}`);
+      return;
+    }
+
+    if (this.textures.exists(spec.textureKey)) this.textures.remove(spec.textureKey);
+    this.textures.addSpriteSheet(spec.textureKey, source, {
+      frameWidth: result.spec.frameWidth,
+      frameHeight: result.spec.frameHeight,
+    });
+  }
+
+  private materializeCarameloSpriteSheet(): void {
+    const spec = CARAMELO_SPRITE_SHEET;
+    if (!this.textures.exists(spec.rawTextureKey)) {
+      console.error(
+        `[BootScene] Sprite sheet crua "${spec.rawTextureKey}" ausente; Vira-lata Caramelo usará fallback visual jogável.`,
+      );
+      return;
+    }
+
+    const rawTexture = this.textures.get(spec.rawTextureKey);
+    const source = rawTexture.getSourceImage();
+    if (!(source instanceof HTMLImageElement)) {
+      console.error(
+        `[BootScene] Sprite sheet "${spec.rawTextureKey}" não veio de uma imagem HTML; Vira-lata Caramelo usará fallback visual jogável.`,
       );
       return;
     }

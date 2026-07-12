@@ -64,13 +64,22 @@ export interface AttackBehavior extends AttackBehaviorSpec {
 
 export interface SpriteFrameRef {
   textureKey: string;
+  frame?: number;
   label?: string;
 }
 
-export type AttackAnimationStageKind = 'once' | 'loopUntilArrival';
+export type AttackAnimationStageName =
+  | 'lying_idle'
+  | 'standing_up'
+  | 'chasing'
+  | 'biting'
+  | 'returning'
+  | 'lying_down';
+
+export type AttackAnimationStageKind = 'once' | 'loop';
 
 export interface AttackAnimationStage {
-  name: 'prepare' | 'run' | 'attack' | string;
+  name: AttackAnimationStageName;
   kind: AttackAnimationStageKind;
   frames: SpriteFrameRef[];
   frameDurationMs: number;
@@ -83,6 +92,7 @@ export interface AttackAnimationDefinition {
   visualScale: number;
   visualSpeedPxPerSec: number;
   arrivalDistancePx: number;
+  idleFrame?: SpriteFrameRef;
   stages: AttackAnimationStage[];
   fallbackSpriteKey?: string;
 }
@@ -109,6 +119,8 @@ export interface TowerType {
   attack: AttackBehaviorSpec;
   /** Chave de textura da apresentação. Ausente ⇒ usa fallback (círculo+emoji). */
   spriteKey?: string;
+  /** Frame inicial da apresentação quando a torre usa uma sprite sheet. */
+  spriteFrame?: SpriteFrameRef;
   /** Sequência visual opcional para ataques; não altera regras de gameplay. */
   attackAnimation?: AttackAnimationDefinition;
 }
@@ -138,21 +150,42 @@ export function engagementTimingsOf(type: TowerType): EngagementTimings {
   const animation = type.attackAnimation;
   if (!animation) return ENGAGEMENT_FALLBACK;
 
-  const prepare = animation.stages.find((stage) => stage.name === 'prepare');
-  const attack = animation.stages.find((stage) => stage.name === 'attack');
-  const strikeSec = stageDurationSec(attack);
+  const standingUp = animation.stages.find((stage) => stage.name === 'standing_up');
+  const biting = animation.stages.find((stage) => stage.name === 'biting');
+  const lyingDown = animation.stages.find((stage) => stage.name === 'lying_down');
+  const strikeSec = stageDurationSec(biting);
   const cueAtSec =
-    attack?.fireCueFrameIndex === undefined
+    biting?.fireCueFrameIndex === undefined
       ? 0
-      : Math.min(strikeSec, (attack.fireCueFrameIndex * Math.max(1, attack.frameDurationMs)) / 1000);
+      : Math.min(
+          strikeSec,
+          (biting.fireCueFrameIndex * Math.max(1, biting.frameDurationMs)) / 1000,
+        );
 
   return {
-    prepareSec: stageDurationSec(prepare),
+    standUpSec: stageDurationSec(standingUp),
     strikeSec,
     cueAtSec,
+    lieDownSec: stageDurationSec(lyingDown),
     pursuitSpeedPxPerSec: animation.visualSpeedPxPerSec,
     arrivalDistancePx: animation.arrivalDistancePx,
   };
+}
+
+function sheetFrames(start: number, end: number, labelPrefix: string): SpriteFrameRef[] {
+  return Array.from({ length: end - start + 1 }, (_, offset) => ({
+    textureKey: TEXTURES.towerCarameloSheet,
+    frame: start + offset,
+    label: `${labelPrefix} ${offset + 1}`,
+  }));
+}
+
+function sheetFramesReverse(start: number, end: number, labelPrefix: string): SpriteFrameRef[] {
+  return Array.from({ length: start - end + 1 }, (_, offset) => ({
+    textureKey: TEXTURES.towerCarameloSheet,
+    frame: start - offset,
+    label: `${labelPrefix} ${offset + 1}`,
+  }));
 }
 
 export const TOWER_TYPES: Record<string, TowerType> = {
@@ -176,56 +209,63 @@ export const TOWER_TYPES: Record<string, TowerType> = {
       engagement: 'pursuer',
     },
     spriteKey: TEXTURES.towerCaramelo,
+    spriteFrame: {
+      textureKey: TEXTURES.towerCarameloSheet,
+      frame: 8,
+      label: 'deitado',
+    },
     attackAnimation: {
       id: 'vira-lata-caramelo-attack',
       visualScale: 3,
       visualSpeedPxPerSec: 520,
       arrivalDistancePx: 22,
+      idleFrame: {
+        textureKey: TEXTURES.towerCarameloSheet,
+        frame: 8,
+        label: 'deitado',
+      },
       fallbackSpriteKey: TEXTURES.towerCaramelo,
       stages: [
         {
-          name: 'prepare',
-          kind: 'once',
-          frameDurationMs: 90,
-          minDurationMs: 120,
-          frames: [
-            {
-              textureKey: TEXTURES.towerCarameloPrepare,
-              label: 'levantar',
-            },
-          ],
+          name: 'lying_idle',
+          kind: 'loop',
+          frameDurationMs: 360,
+          frames: sheetFrames(8, 9, 'deitado'),
         },
         {
-          name: 'run',
-          kind: 'loopUntilArrival',
+          name: 'standing_up',
+          kind: 'once',
+          frameDurationMs: 60,
+          minDurationMs: 120,
+          frames: sheetFrames(10, 15, 'levantando'),
+        },
+        {
+          name: 'chasing',
+          kind: 'loop',
           frameDurationMs: 80,
           minDurationMs: 80,
-          frames: [
-            {
-              textureKey: TEXTURES.towerCarameloRun,
-              label: 'corrida 1',
-            },
-            {
-              textureKey: TEXTURES.towerCarameloRunAlt,
-              label: 'corrida 2',
-            },
-          ],
+          frames: sheetFrames(16, 23, 'corrida'),
         },
         {
-          name: 'attack',
+          name: 'biting',
           kind: 'once',
+          frameDurationMs: 32,
+          fireCueFrameIndex: 2,
+          frames: sheetFrames(25, 29, 'mordida'),
+        },
+        {
+          name: 'returning',
+          kind: 'loop',
           frameDurationMs: 80,
-          fireCueFrameIndex: 0,
-          frames: [
-            {
-              textureKey: TEXTURES.towerCarameloAttack,
-              label: 'ataque 1',
-            },
-            {
-              textureKey: TEXTURES.towerCarameloAttackAlt,
-              label: 'ataque 2',
-            },
-          ],
+          minDurationMs: 80,
+          frames: sheetFrames(16, 23, 'retorno'),
+        },
+        {
+          name: 'lying_down',
+          kind: 'once',
+          frameDurationMs: 45,
+          minDurationMs: 180,
+          frames: sheetFramesReverse(15, 8, 'deitando'),
         },
       ],
     },

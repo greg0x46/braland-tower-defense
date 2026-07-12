@@ -87,6 +87,67 @@ def trim_solid_background(image: Image.Image, tolerance: int) -> Image.Image:
     return image.crop(bbox)
 
 
+def is_checkerboard_background_pixel(
+    pixel: tuple[int, int, int, int],
+    min_channel: int,
+    tolerance: int,
+) -> bool:
+    red, green, blue, alpha = pixel
+    if alpha == 0:
+        return True
+    return min(red, green, blue) >= min_channel and max(red, green, blue) - min(
+        red,
+        green,
+        blue,
+    ) <= tolerance
+
+
+def remove_connected_checkerboard_background(
+    image: Image.Image,
+    min_channel: int,
+    tolerance: int,
+) -> Image.Image:
+    """Turn edge-connected light gray checkerboard pixels transparent."""
+
+    output = image.copy()
+    pixels = output.load()
+    width, height = output.size
+    seen = bytearray(width * height)
+    stack: list[tuple[int, int]] = []
+
+    def enqueue(x: int, y: int) -> None:
+        index = y * width + x
+        if seen[index]:
+            return
+        seen[index] = 1
+        if is_checkerboard_background_pixel(pixels[x, y], min_channel, tolerance):
+            stack.append((x, y))
+
+    for x in range(width):
+        enqueue(x, 0)
+        enqueue(x, height - 1)
+    for y in range(1, height - 1):
+        enqueue(0, y)
+        enqueue(width - 1, y)
+
+    while stack:
+        x, y = stack.pop()
+        red, green, blue, _alpha = pixels[x, y]
+        pixels[x, y] = (red, green, blue, 0)
+
+        for nx, ny in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
+            if nx < 0 or nx >= width or ny < 0 or ny >= height:
+                continue
+            index = ny * width + nx
+            if seen[index]:
+                continue
+            seen[index] = 1
+            if is_checkerboard_background_pixel(pixels[nx, ny], min_channel, tolerance):
+                stack.append((nx, ny))
+
+    return output
+
+
 def alpha_components(
     alpha: Image.Image,
     origin: tuple[int, int],
@@ -366,6 +427,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="Trim a solid corner background inside each source cell before resizing",
     )
     parser.add_argument(
+        "--transparent-checkerboard",
+        action="store_true",
+        help=(
+            "Turn edge-connected light gray/white checkerboard background pixels "
+            "transparent before extracting frames"
+        ),
+    )
+    parser.add_argument(
+        "--checkerboard-min-channel",
+        type=non_negative_int,
+        default=205,
+        help="Minimum RGB channel value treated as checkerboard background",
+    )
+    parser.add_argument(
+        "--checkerboard-tolerance",
+        type=non_negative_int,
+        default=28,
+        help="Maximum RGB channel spread treated as checkerboard background",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Print the calculated layout without writing the output image",
@@ -435,6 +516,12 @@ def main() -> int:
     source_margin = parse_spacing(args.source_margin, "--source-margin")
 
     image = Image.open(args.input).convert("RGBA")
+    if args.transparent_checkerboard:
+        image = remove_connected_checkerboard_background(
+            image,
+            args.checkerboard_min_channel,
+            args.checkerboard_tolerance,
+        )
     total_source_frames = args.source_cols * args.source_rows
     frame_count = args.frame_count or total_source_frames
     if frame_count > total_source_frames:
