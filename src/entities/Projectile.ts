@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { COLORS } from '../core/constants';
+import type { AnnounceCombatAudio } from '../core/EventBus';
 import type { ProjectileVisualSpec } from '../data/towers';
 import type { Enemy } from './Enemy';
 
@@ -11,6 +12,10 @@ import type { Enemy } from './Enemy';
 export class Projectile extends Phaser.GameObjects.Container {
   private readonly speed: number;
   private readonly damage: number;
+  /** De qual torre este projétil saiu — o som do impacto pode ser dela (chinelada). */
+  private readonly towerTypeId: string;
+  /** Anúncio de apresentação do impacto real. O projétil não conhece som. */
+  private readonly announce?: AnnounceCombatAudio;
   private readonly spinRadPerSec: number;
   private readonly rotationOffsetRad: number;
   private readonly visual: Phaser.GameObjects.Image | Phaser.GameObjects.Arc;
@@ -27,11 +32,15 @@ export class Projectile extends Phaser.GameObjects.Container {
     target: Enemy,
     damage: number,
     speed: number,
+    towerTypeId: string,
     visualSpec?: ProjectileVisualSpec,
+    announce?: AnnounceCombatAudio,
   ) {
     super(scene, x, y);
     this.speed = speed;
     this.damage = damage;
+    this.towerTypeId = towerTypeId;
+    this.announce = announce;
     this.spinRadPerSec = visualSpec?.spinRadPerSec ?? 0;
     this.rotationOffsetRad = visualSpec?.rotationOffsetRad ?? 0;
     this.target = target;
@@ -64,8 +73,19 @@ export class Projectile extends Phaser.GameObjects.Container {
 
     if (dist <= move) {
       this.setPosition(this.lastX, this.lastY);
+      // Impacto real em alvo vivo é a única coisa que soa: um projétil que chega na
+      // última posição conhecida de um alvo já morto expira em silêncio (C1).
       if (this.target && this.target.status === 'alive') {
-        this.target.takeDamage(this.damage);
+        const result = this.target.takeDamage(this.damage);
+        if (result.damaged) {
+          this.announce?.({
+            category: 'enemy-damaged',
+            towerTypeId: this.towerTypeId,
+            enemyTypeId: this.target.typeId,
+            x: this.x,
+            y: this.y,
+          });
+        }
       }
       return true;
     }

@@ -8,6 +8,7 @@ import {
 } from '../data/towers';
 import type { Enemy } from './Enemy';
 import { COLORS } from '../core/constants';
+import type { AnnounceCombatAudio } from '../core/EventBus';
 import { isTargetValid, resolveAttack, type AttackOutcome, type Origin } from '../systems/combat';
 import {
   createEngagementState,
@@ -25,13 +26,19 @@ import { TowerAttackAnimator } from './TowerAttackAnimator';
  */
 export const TOWER_SPRITE_SCALE = 3.0;
 
-/** Callback usado pela torre para pedir à cena a criação de um projétil. */
+/**
+ * Callback usado pela torre para pedir à cena a criação de um projétil.
+ *
+ * `towerTypeId` viaja junto porque o impacto acontece longe, e depois: quando o
+ * chinelo chega, quem toca o som precisa saber de qual torre ele saiu.
+ */
 export type FireFn = (
   x: number,
   y: number,
   target: Enemy,
   damage: number,
   speed: number,
+  towerTypeId: string,
   visual?: ProjectileVisualSpec,
 ) => void;
 
@@ -46,6 +53,8 @@ export class Tower extends Phaser.GameObjects.Container {
   readonly behavior: AttackBehavior;
 
   private readonly fire: FireFn;
+  /** Anúncio de apresentação. A torre não conhece som — só avisa o que ela fez. */
+  private readonly announce?: AnnounceCombatAudio;
   private readonly base: Origin;
   private readonly engagementConfig: EngagementConfig;
   private readonly engagementState: EngagementState<Enemy>;
@@ -54,12 +63,20 @@ export class Tower extends Phaser.GameObjects.Container {
   private readonly spriteVisual?: Phaser.GameObjects.Image;
   private readonly attackAnimator?: TowerAttackAnimator;
 
-  constructor(scene: Phaser.Scene, x: number, y: number, type: TowerType, fire: FireFn) {
+  constructor(
+    scene: Phaser.Scene,
+    x: number,
+    y: number,
+    type: TowerType,
+    fire: FireFn,
+    announce?: AnnounceCombatAudio,
+  ) {
     super(scene, x, y);
     this.def = type;
     this.radius = type.radius;
     this.behavior = attackBehaviorOf(type);
     this.fire = fire;
+    this.announce = announce;
     this.base = { x, y };
     this.engagementState = createEngagementState<Enemy>(this.base);
     this.engagementConfig = {
@@ -189,30 +206,62 @@ export class Tower extends Phaser.GameObjects.Container {
     this.applyOutcome(outcome);
   }
 
-  /** Aplica o efeito descrito pelo comportamento. */
+  /**
+   * Aplica o efeito descrito pelo comportamento — e é o único ponto onde o ataque
+   * vira som. O anúncio sai **depois** de `resolveAttack()` devolver um efeito real:
+   * torre sem alvo, em recarga ou com strike cancelado resolve `none` e não chega
+   * aqui, então não existe som de ataque no vazio (FR-002, contrato C1).
+   *
+   * A ordem também é contrato (C4): primeiro o ataque, depois o dano que ele causou.
+   */
   private applyOutcome(outcome: AttackOutcome<Enemy>): void {
     switch (outcome.kind) {
       case 'none':
         return;
 
       case 'projectile':
+        this.announceAttack();
         this.fire(
           this.engagementState.x,
           this.engagementState.y,
           outcome.target,
           outcome.damage,
           outcome.speed,
+          this.def.id,
           this.def.projectileVisual,
         );
         return;
 
       case 'direct':
       case 'area':
+        this.announceAttack();
         for (const target of outcome.targets) {
-          if (isTargetValid(this.behavior, this.base, target)) target.takeDamage(outcome.damage);
+          if (!isTargetValid(this.behavior, this.base, target)) continue;
+
+          // Só o dano confirmado soa: um alvo que já morreu no mesmo golpe em área
+          // devolve `damaged: false` e não vira impacto fantasma.
+          const result = target.takeDamage(outcome.damage);
+          if (!result.damaged) continue;
+
+          this.announce?.({
+            category: 'enemy-damaged',
+            towerTypeId: this.def.id,
+            enemyTypeId: target.typeId,
+            x: target.x,
+            y: target.y,
+          });
         }
         return;
     }
+  }
+
+  private announceAttack(): void {
+    this.announce?.({
+      category: 'tower-attack',
+      towerTypeId: this.def.id,
+      x: this.engagementState.x,
+      y: this.engagementState.y,
+    });
   }
 
   /** Anel de alcance também usado como feedback (ex.: destaque). */

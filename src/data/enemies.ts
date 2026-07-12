@@ -1,4 +1,5 @@
 import { COLORS, TEXTURES } from '../core/constants';
+import { COMBAT_SFX_IDS, type EnemySoundProfileSpec } from './audio';
 
 /**
  * Configuração de um tipo de inimigo. Estrutura data-driven: adicionar novos
@@ -18,6 +19,11 @@ export interface EnemyType {
   radius: number;
   /** Chave da textura (sprite sheet). Ausente ⇒ fallback círculo + emoji. */
   spriteKey?: string;
+  /**
+   * Perfil sonoro opcional (apresentação). Ausente ⇒ sons padrão por categoria.
+   * Não altera HP, velocidade, recompensa, raio nem status (FR-006).
+   */
+  sound?: EnemySoundProfileSpec;
 }
 
 export const ENEMY_TYPES: Record<string, EnemyType> = {
@@ -31,5 +37,10 @@ export const ENEMY_TYPES: Record<string, EnemyType> = {
     reward: 8,
     radius: 20,
     spriteKey: TEXTURES.enemyMotoboy,
+    sound: {
+      damaged: COMBAT_SFX_IDS.impactDefault,
+      killed: COMBAT_SFX_IDS.killDefault,
+      leaked: COMBAT_SFX_IDS.leakDefault,
+    },
   },
 };

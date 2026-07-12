@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { GameState } from '../core/GameState';
-import { TEXTURES } from '../core/constants';
+import { COMBAT_SFX, TEXTURES } from '../core/constants';
 import { MusicManager } from '../managers/MusicManager';
 import {
   CARAMELO_SPRITE_SHEET,
@@ -11,6 +11,13 @@ import {
   type SpriteSheetSpec,
 } from '../core/spriteSheets';
 import initialMapUrl from '../assets/maps/initial-map.png';
+import combatAttackSfxUrl from '../assets/audio/combat-attack-default.wav';
+import combatImpactSfxUrl from '../assets/audio/combat-impact-default.wav';
+import combatKillSfxUrl from '../assets/audio/combat-kill-default.wav';
+import combatLeakSfxUrl from '../assets/audio/combat-leak-default.wav';
+import chineladaAttackSfxUrl from '../assets/audio/combat-attack-chinelada.wav';
+import chineladaImpactSfxUrl from '../assets/audio/combat-impact-chinelada.wav';
+import latidoAttackSfxUrl from '../assets/audio/combat-attack-latido.wav';
 import motoboySheetUrl from '../assets/enemies/dois-caras-numa-moto/dois-caras-numa-moto-sheet.png';
 import caramelUrl from '../assets/towers/vira-lata-caramelo/vira-lata-caramelo.png';
 import caramelSheetUrl from '../assets/towers/vira-lata-caramelo/vira-lata-caramelo-sheet.png';
@@ -31,6 +38,9 @@ export class BootScene extends Phaser.Scene {
   /** Chaves que esta cena enfileirou — as únicas cujas falhas ela reporta. */
   private readonly ownedAssets = new Set<string>();
 
+  /** Subconjunto de áudio: a falha aqui cai no fallback do catálogo, não no visual. */
+  private readonly combatSfxKeys = new Set<string>();
+
   constructor() {
     super('BootScene');
   }
@@ -45,6 +55,17 @@ export class BootScene extends Phaser.Scene {
     // Carrega a imagem crua; o recorte público só é materializado em create()
     // após validar a grade contra as dimensões reais do asset.
     this.loadImage(MOTOBOY_SPRITE_SHEET.rawTextureKey, motoboySheetUrl);
+
+    // Efeitos de combate entram no preload (ao contrário da trilha de 6 MB, que
+    // corre em segundo plano): são poucos KB e precisam estar prontos quando o
+    // primeiro tiro sair, senão o ataque inicial nasce mudo (D4).
+    this.loadAudio(COMBAT_SFX.cacheKeys.attackDefault, combatAttackSfxUrl);
+    this.loadAudio(COMBAT_SFX.cacheKeys.impactDefault, combatImpactSfxUrl);
+    this.loadAudio(COMBAT_SFX.cacheKeys.killDefault, combatKillSfxUrl);
+    this.loadAudio(COMBAT_SFX.cacheKeys.leakDefault, combatLeakSfxUrl);
+    this.loadAudio(COMBAT_SFX.cacheKeys.attackChinelada, chineladaAttackSfxUrl);
+    this.loadAudio(COMBAT_SFX.cacheKeys.impactChinelada, chineladaImpactSfxUrl);
+    this.loadAudio(COMBAT_SFX.cacheKeys.attackLatido, latidoAttackSfxUrl);
 
     // Sem erro silencioso: registra a falha e deixa os consumidores caírem no
     // fallback (círculo + emoji). Não relança — o jogo segue jogável (FR-007).
@@ -80,6 +101,13 @@ export class BootScene extends Phaser.Scene {
           );
           return;
         }
+        if (this.combatSfxKeys.has(file.key)) {
+          console.error(
+            `[BootScene] Falha ao carregar efeito de combate "${file.key}" (${file.url}); ` +
+              'o CombatSfxManager tentará o fallback do catálogo ou seguirá em silêncio.',
+          );
+          return;
+        }
         console.error(
           `[BootScene] Falha ao carregar asset "${file.key}" (${file.url}).`,
         );
@@ -91,6 +119,13 @@ export class BootScene extends Phaser.Scene {
   private loadImage(key: string, url: string): void {
     this.ownedAssets.add(key);
     this.load.image(key, url);
+  }
+
+  /** Mesma disciplina para áudio: quem carrega é quem reporta a falha (FR-009). */
+  private loadAudio(key: string, url: string): void {
+    this.ownedAssets.add(key);
+    this.combatSfxKeys.add(key);
+    this.load.audio(key, url);
   }
 
   create(): void {

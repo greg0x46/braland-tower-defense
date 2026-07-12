@@ -19,6 +19,22 @@ import type { OrientationState } from '../systems/orientation';
 export type EnemyStatus = 'alive' | 'dead' | 'leaked';
 
 /**
+ * O que de fato aconteceu no golpe. Existe para que a apresentação (som de impacto)
+ * possa perguntar "houve dano real?" sem reimplementar a regra — e sem que um golpe
+ * em inimigo já morto vire som fantasma (contrato C1).
+ *
+ * É só um relatório: nenhum campo daqui alimenta HP, status, recompensa ou vida.
+ */
+export interface TakeDamageResult {
+  /** Dano aplicado a um inimigo vivo. */
+  readonly damaged: boolean;
+  /** Este golpe foi o que zerou o HP. */
+  readonly killed: boolean;
+}
+
+const NO_DAMAGE: TakeDamageResult = { damaged: false, killed: false };
+
+/**
  * Inimigo que percorre o caminho. Representado por um Container com corpo
  * (círculo colorido), emoji e barra de vida. GameScene chama step() a cada
  * frame e trata a recompensa/vida quando o status deixa de ser 'alive'.
@@ -179,13 +195,17 @@ export class Enemy extends Phaser.GameObjects.Container {
     return this.hp;
   }
 
-  takeDamage(amount: number): void {
-    if (this.status !== 'alive') return;
+  takeDamage(amount: number): TakeDamageResult {
+    if (this.status !== 'alive' || amount <= 0) return NO_DAMAGE;
+
     this.hp = Math.max(0, this.hp - amount);
     this.hpBarFill.width = this.hpBarWidth * (this.hp / this.maxHp);
     if (this.hp <= 0) {
       this.status = 'dead';
+      return { damaged: true, killed: true };
     }
+
+    return { damaged: true, killed: false };
   }
 
   get reward(): number {

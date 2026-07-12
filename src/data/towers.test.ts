@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { ENGAGEMENT_FALLBACK, TEXTURES } from '../core/constants';
 import { CARAMELO_SPRITE_SHEET, MAE_DE_HAVAIANAS_SPRITE_SHEET } from '../core/spriteSheets';
 import { attackBehaviorOf, engagementTimingsOf, TOWER_TYPES } from './towers';
+import { ENEMY_TYPES } from './enemies';
 import { ACCEPTED_CONTRACTS, describeContractDrift, findContractDrift } from './contracts';
+import { COMBAT_SFX_CATALOG, COMBAT_SFX_DEFAULTS, COMBAT_SFX_IDS } from './audio';
+import { resolveCombatSfxEffect, soundProfileEffectId } from '../systems/combatSfx';
 
 describe('TOWER_TYPES regressions', () => {
   it('mantem os stats aceitos do Vira-lata Caramelo', () => {
@@ -192,5 +195,115 @@ describe('Mãe de Havaianas', () => {
     expect(timings.strikeSec).toBe(0.232);
     expect(timings.cueAtSec).toBe(0.174);
     expect(timings.lieDownSec).toBe(0.18);
+  });
+});
+
+/** Perfil sonoro é apresentação: existe, resolve, e não toca em nada de gameplay (011). */
+describe('perfil sonoro das torres', () => {
+  const available = (): boolean => true;
+
+  it('toda torre resolve um som de ataque existente no catalogo', () => {
+    for (const tower of Object.values(TOWER_TYPES)) {
+      const effectId = soundProfileEffectId(
+        { category: 'tower-attack', towerTypeId: tower.id },
+        TOWER_TYPES,
+        {},
+      );
+      const resolved = resolveCombatSfxEffect(
+        COMBAT_SFX_CATALOG,
+        COMBAT_SFX_DEFAULTS,
+        { category: 'tower-attack', effectId },
+        available,
+      );
+
+      expect(resolved, `torre "${tower.id}" sem som de ataque resolvido`).not.toBeNull();
+      expect(resolved?.category).toBe('tower-attack');
+    }
+  });
+
+  it('uma torre sem perfil declarado cai no som padrao de ataque (FR-010)', () => {
+    const semSom = { ...TOWER_TYPES['vira-lata-caramelo'], sound: undefined };
+    const effectId = soundProfileEffectId(
+      { category: 'tower-attack', towerTypeId: semSom.id },
+      { [semSom.id]: semSom },
+      {},
+    );
+
+    expect(effectId).toBeUndefined();
+
+    const resolved = resolveCombatSfxEffect(
+      COMBAT_SFX_CATALOG,
+      COMBAT_SFX_DEFAULTS,
+      { category: 'tower-attack', effectId },
+      available,
+    );
+
+    expect(resolved?.id).toBe(COMBAT_SFX_IDS.attackDefault);
+  });
+
+  /** A chinelada é gravação própria: arremesso e baque são efeitos distintos. */
+  it('da a Mae de Havaianas som proprio de arremesso e de impacto', () => {
+    const attack = soundProfileEffectId(
+      { category: 'tower-attack', towerTypeId: 'mae-de-havaianas' },
+      TOWER_TYPES,
+      ENEMY_TYPES,
+    );
+    const impact = soundProfileEffectId(
+      {
+        category: 'enemy-damaged',
+        towerTypeId: 'mae-de-havaianas',
+        enemyTypeId: 'dois-caras-moto',
+      },
+      TOWER_TYPES,
+      ENEMY_TYPES,
+    );
+
+    expect(attack).toBe(COMBAT_SFX_IDS.attackChinelada);
+    expect(impact).toBe(COMBAT_SFX_IDS.impactChinelada);
+    expect(COMBAT_SFX_CATALOG[COMBAT_SFX_IDS.attackChinelada].category).toBe('tower-attack');
+    expect(COMBAT_SFX_CATALOG[COMBAT_SFX_IDS.impactChinelada].category).toBe('enemy-damaged');
+  });
+
+  /** O Caramelo late ao atacar, mas a mordida não tem timbre próprio: o impacto é do alvo. */
+  it('da ao Caramelo latido proprio no ataque e impacto padrao do inimigo', () => {
+    const attack = soundProfileEffectId(
+      { category: 'tower-attack', towerTypeId: 'vira-lata-caramelo' },
+      TOWER_TYPES,
+      ENEMY_TYPES,
+    );
+    const impact = soundProfileEffectId(
+      {
+        category: 'enemy-damaged',
+        towerTypeId: 'vira-lata-caramelo',
+        enemyTypeId: 'dois-caras-moto',
+      },
+      TOWER_TYPES,
+      ENEMY_TYPES,
+    );
+
+    expect(attack).toBe(COMBAT_SFX_IDS.attackLatido);
+    expect(impact).toBe(COMBAT_SFX_IDS.impactDefault);
+  });
+
+  /** As duas torres precisam soar diferente uma da outra (FR-004 aplicado ao ataque). */
+  it('mantem os ataques das duas torres distinguiveis entre si', () => {
+    const ids = Object.values(TOWER_TYPES).map((tower) =>
+      soundProfileEffectId(
+        { category: 'tower-attack', towerTypeId: tower.id },
+        TOWER_TYPES,
+        ENEMY_TYPES,
+      ),
+    );
+
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('nao altera dano, alcance, cadencia nem regra de alvo (FR-006)', () => {
+    for (const id of ['vira-lata-caramelo', 'mae-de-havaianas'] as const) {
+      const comSom = attackBehaviorOf(TOWER_TYPES[id]);
+      const semSom = attackBehaviorOf({ ...TOWER_TYPES[id], sound: undefined });
+
+      expect(comSom).toEqual(semSom);
+    }
   });
 });

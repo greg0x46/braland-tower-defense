@@ -1,4 +1,5 @@
 import { COLORS, ENGAGEMENT_FALLBACK, TEXTURES } from '../core/constants';
+import { COMBAT_SFX_IDS, type TowerSoundProfileSpec } from './audio';
 import type { EngagementPhaseKind, EngagementTimings } from '../systems/engagement';
 import type { Targetable } from '../systems/targeting';
 import type { VisualAnimationPlayback } from '../systems/visualStateMachine';
@@ -127,6 +128,11 @@ export interface TowerType {
   attackAnimation?: AttackAnimationDefinition;
   /** Apresentação opcional do projétil; sem textura, o projétil usa fallback. */
   projectileVisual?: ProjectileVisualSpec;
+  /**
+   * Perfil sonoro opcional (apresentação). Ausente ⇒ som padrão da categoria. Não
+   * altera dano, alcance, cadência, regra de alvo nem `visualCuePolicy` (FR-006).
+   */
+  sound?: TowerSoundProfileSpec;
 }
 
 /**
@@ -232,6 +238,9 @@ export const TOWER_TYPES: Record<string, TowerType> = {
       visualCuePolicy: 'onCue',
       engagement: 'pursuer',
     },
+    // Latido gravado (CC0). O impacto continua sendo o som de dano do alvo: a mordida
+    // não tem timbre próprio como a chinelada tem.
+    sound: { attack: COMBAT_SFX_IDS.attackLatido },
     spriteKey: TEXTURES.towerCaramelo,
     spriteFrame: {
       textureKey: TEXTURES.towerCarameloSheet,
@@ -320,6 +329,12 @@ export const TOWER_TYPES: Record<string, TowerType> = {
       visualCuePolicy: 'onCue',
       engagement: 'stationary',
       projectileSpeed: 620,
+    },
+    // A chinelada é gravação própria: o arremesso sai quando ela joga, o baque quando
+    // o chinelo chega. O impacto declarado aqui vence o som de dano do motoboy.
+    sound: {
+      attack: COMBAT_SFX_IDS.attackChinelada,
+      impact: COMBAT_SFX_IDS.impactChinelada,
     },
     spriteKey: TEXTURES.towerMaeHavaianasSheet,
     spriteFrame: {

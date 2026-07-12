@@ -12,6 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "tsc --noEmit && vitest run",
+    "generate:combat-sfx": "node tools/generate_combat_sfx.mjs",
+    "prepare:sfx": "node tools/prepare_sfx.mjs",
     "adjust:sprite-sheet": "python3 tools/fix_sprite_sheet.py",
     "fix:sprite-sheet": "python3 tools/fix_sprite_sheet.py"
   },

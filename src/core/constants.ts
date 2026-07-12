@@ -38,6 +38,58 @@ export const AUDIO = {
 } as const;
 
 /**
+ * Efeitos sonoros de combate. Só chaves de cache e números de mixagem/limitação —
+ * o catálogo (`data/audio.ts`) monta as entradas e o `CombatSfxManager` as toca.
+ * O caminho do arquivo não aparece aqui (Constitution XI).
+ *
+ * `mix` fica abaixo do volume da trilha (0.35) de propósito: o efeito é um destaque
+ * momentâneo, não uma segunda camada de música (FR-007). O alerta de vazamento é o
+ * mais alto porque é o único que informa uma perda.
+ *
+ * `throttle` é o que impede uma onda de 20 inimigos de virar massa sonora (FR-008).
+ * `maxSimultaneous` é o teto global; `alwaysAudiblePriority` é a porta de escape:
+ * um efeito com prioridade igual ou maior atravessa o teto, e é por isso que o
+ * vazamento nunca some atrás de uma rajada de impactos (SC-005).
+ */
+export const COMBAT_SFX = {
+  cacheKeys: {
+    attackDefault: 'sfx-combat-attack-default',
+    impactDefault: 'sfx-combat-impact-default',
+    killDefault: 'sfx-combat-kill-default',
+    leakDefault: 'sfx-combat-leak-default',
+    attackChinelada: 'sfx-combat-attack-chinelada',
+    impactChinelada: 'sfx-combat-impact-chinelada',
+    attackLatido: 'sfx-combat-attack-latido',
+  },
+  mix: {
+    towerAttack: 0.3,
+    enemyDamaged: 0.24,
+    enemyKilled: 0.38,
+    enemyLeaked: 0.55,
+  },
+  priority: {
+    towerAttack: 10,
+    enemyDamaged: 20,
+    enemyKilled: 50,
+    enemyLeaked: 90,
+  },
+  throttle: {
+    towerAttackCooldownMs: 70,
+    enemyDamagedCooldownMs: 90,
+    enemyKilledCooldownMs: 60,
+    enemyLeakedCooldownMs: 220,
+    towerAttackMaxConcurrent: 3,
+    enemyDamagedMaxConcurrent: 3,
+    enemyKilledMaxConcurrent: 3,
+    enemyLeakedMaxConcurrent: 2,
+    /** Espaçamento mínimo entre dois sons quaisquer da mesma categoria. */
+    categorySpacingMs: 40,
+    maxSimultaneous: 6,
+    alwaysAudiblePriority: 80,
+  },
+} as const;
+
+/**
  * Timings usados quando uma torre nao declara `attackAnimation`. Mantem gameplay
  * testavel e independente de textura: a apresentacao pode falhar sem desligar
  * dano, cadencia, encadeamento ou retorno.

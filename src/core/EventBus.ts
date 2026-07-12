@@ -29,9 +29,64 @@ export const GameEvents = {
   MATCH_RESET: 'match-reset',
   WAVE_STATE_CHANGED: 'wave-state-changed',
   AUDIO_SETTINGS_CHANGED: 'audio-settings-changed',
+  COMBAT_AUDIO_EVENT: 'combat-audio-event',
 } as const;
 
 export type GameEventName = (typeof GameEvents)[keyof typeof GameEvents];
+
+/** As quatro coisas que o combate faz e que valem um som (contrato C2). */
+export type CombatSfxCategory =
+  | 'tower-attack'
+  | 'enemy-damaged'
+  | 'enemy-killed'
+  | 'enemy-leaked';
+
+/**
+ * Id estável de um efeito no catálogo (`data/audio.ts`). Fica aberto aqui de
+ * propósito: se o `core/` conhecesse os ids concretos, trocar um som viraria
+ * mudança de contrato global (Constitution XI). Ele é estreitado onde é autorado —
+ * um perfil sonoro de torre/inimigo só aceita id que existe no catálogo — e a
+ * resolução em runtime cai no padrão da categoria quando o id não existe.
+ */
+export type CombatSfxId = string;
+
+/**
+ * O que o gameplay sabe no instante do acontecimento. A cena completa com
+ * `eventId` e `occurredAtMs` (relógio dela) e emite — a entidade não gera tempo
+ * nem id, e nunca conhece o Sound Manager.
+ */
+export type CombatAudioSignal =
+  | { category: 'tower-attack'; towerTypeId: string; x: number; y: number }
+  | {
+      category: 'enemy-damaged';
+      /** Quem bateu: uma torre com som de impacto próprio tem prioridade sobre o do alvo. */
+      towerTypeId: string;
+      enemyTypeId: string;
+      x: number;
+      y: number;
+    };
+
+/** Como `Tower` e `Projectile` anunciam um efeito audível sem depender de áudio. */
+export type AnnounceCombatAudio = (signal: CombatAudioSignal) => void;
+
+/**
+ * Payload do evento de áudio de combate. Completo o bastante para o consumidor
+ * resolver perfil/fallback sem ler estado global (C2) — e sem dano, recompensa ou
+ * vida, que não são fonte de verdade de áudio.
+ */
+export interface CombatAudioEventPayload {
+  eventId: string;
+  category: CombatSfxCategory;
+  /** Sempre presente em `tower-attack`. */
+  towerTypeId?: string;
+  /** Sempre presente nos eventos de inimigo. */
+  enemyTypeId?: string;
+  /** Override quando o produtor já conhece o efeito; normalmente resolvido por perfil. */
+  effectId?: CombatSfxId;
+  x?: number;
+  y?: number;
+  occurredAtMs: number;
+}
 
 /** Payload de cada evento. Completo o bastante para o consumidor não precisar ler estado global. */
 export interface GameEventPayloads {
@@ -52,6 +107,7 @@ export interface GameEventPayloads {
     volume: number;
     effectiveVolume: number;
   };
+  [GameEvents.COMBAT_AUDIO_EVENT]: CombatAudioEventPayload;
 }
 
 export type EventStatus = 'active' | 'reserved';
@@ -103,13 +159,19 @@ export const EVENT_CATALOG: Record<GameEventName, EventContract> = {
   [GameEvents.ENEMY_KILLED]: {
     status: 'active',
     producer: 'GameScene (resolução de combate)',
-    consumers: ['GameState (credita a recompensa)'],
+    consumers: [
+      'GameState (credita a recompensa)',
+      'CombatSfxManager (som de derrota — apresentação, não mexe na recompensa)',
+    ],
     emissionRules: 'Emitido uma vez por inimigo abatido, no frame em que ele morre.',
   },
   [GameEvents.ENEMY_LEAKED]: {
     status: 'active',
     producer: 'GameScene (fim do caminho)',
-    consumers: ['GameState (aplica o dano à base)'],
+    consumers: [
+      'GameState (aplica o dano à base)',
+      'CombatSfxManager (alerta de vazamento — apresentação, não mexe na vida)',
+    ],
     emissionRules: 'Emitido uma vez por inimigo que chega ao fim do caminho.',
   },
   [GameEvents.MATCH_DEFEATED]: {
@@ -121,7 +183,10 @@ export const EVENT_CATALOG: Record<GameEventName, EventContract> = {
   [GameEvents.MATCH_RESET]: {
     status: 'active',
     producer: 'GameState.reset()',
-    consumers: ['BuildManager (limpa seleção e preview pendentes)'],
+    consumers: [
+      'BuildManager (limpa seleção e preview pendentes)',
+      'CombatSfxManager (para os sons ativos e zera as janelas de throttle)',
+    ],
     emissionRules: 'Emitido ao reiniciar a partida, depois dos eventos de estado inicial.',
   },
   [GameEvents.WAVE_STATE_CHANGED]: {
@@ -138,12 +203,23 @@ export const EVENT_CATALOG: Record<GameEventName, EventContract> = {
     producer: 'AudioSettings (preferência de mudo/volume)',
     consumers: [
       'MusicManager (aplica o volume efetivo no som)',
+      'CombatSfxManager (volume dos efeitos; silencia os ativos quando chega a 0)',
       'UIScene (ícone de mudo + posição da alça do slider)',
     ],
     emissionRules:
       'Emitido apenas quando a preferência muda de fato (mesma disciplina de PAUSE_STATE_CHANGED). ' +
       'Arrastar o slider sem mudar o volume resultante não emite. Emitido uma vez no boot, após ' +
       'carregar a preferência salva, para o HUD nascer sincronizado.',
+  },
+  [GameEvents.COMBAT_AUDIO_EVENT]: {
+    status: 'active',
+    producer: 'GameScene (ataque real de torre e impacto real em inimigo vivo)',
+    consumers: ['CombatSfxManager (resolve o efeito no catálogo e toca)'],
+    emissionRules:
+      'Só nasce de ação de combate confirmada (contrato C1): torre sem alvo, em recarga ou com ' +
+      'strike cancelado NÃO emite; projétil que expira sem acertar alvo vivo NÃO emite. Derrota e ' +
+      'vazamento não passam por aqui — continuam em ENEMY_KILLED/ENEMY_LEAKED, que já são os ' +
+      'eventos de domínio. O payload é apresentação: nunca carrega dano, recompensa ou vida.',
   },
 };
 

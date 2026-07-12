@@ -1,7 +1,17 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { EVENT_CATALOG, GameEvents, type GameEventName } from './EventBus';
+import {
+  emitGameEvent,
+  EventBus,
+  EVENT_CATALOG,
+  GameEvents,
+  offGameEvent,
+  onGameEvent,
+  type CombatAudioEventPayload,
+  type CombatSfxCategory,
+  type GameEventName,
+} from './EventBus';
 
 const SRC_DIR = join(import.meta.dirname, '..');
 
@@ -94,5 +104,118 @@ describe('EVENT_CATALOG', () => {
         `evento ativo "${event}" nao tem consumidor real; marque-o como reservado`,
       ).toBe(true);
     }
+  });
+});
+
+/** Contratos de audio de combate (011) — C2, C3 e C5 de `combat-audio-events.md`. */
+describe('COMBAT_AUDIO_EVENT', () => {
+  const contract = EVENT_CATALOG[GameEvents.COMBAT_AUDIO_EVENT];
+
+  it('e um evento ativo de apresentacao, produzido pela cena e consumido pelo manager de SFX', () => {
+    expect(contract.status).toBe('active');
+    expect(contract.producer).toContain('GameScene');
+    expect(contract.consumers.join(' ')).toContain('CombatSfxManager');
+  });
+
+  it('entrega ao consumidor o payload suficiente para resolver perfil e fallback (C2)', () => {
+    const received: CombatAudioEventPayload[] = [];
+    const listener = (payload: CombatAudioEventPayload): void => {
+      received.push(payload);
+    };
+    onGameEvent(GameEvents.COMBAT_AUDIO_EVENT, listener);
+
+    emitGameEvent(GameEvents.COMBAT_AUDIO_EVENT, {
+      eventId: 'sfx-1',
+      category: 'tower-attack',
+      towerTypeId: 'vira-lata-caramelo',
+      x: 100,
+      y: 200,
+      occurredAtMs: 1_500,
+    });
+    emitGameEvent(GameEvents.COMBAT_AUDIO_EVENT, {
+      eventId: 'sfx-2',
+      category: 'enemy-damaged',
+      enemyTypeId: 'dois-caras-moto',
+      x: 110,
+      y: 210,
+      occurredAtMs: 1_520,
+    });
+
+    offGameEvent(GameEvents.COMBAT_AUDIO_EVENT, listener);
+
+    expect(received).toHaveLength(2);
+    // `tower-attack` sempre traz o tipo da torre; eventos de inimigo, o do inimigo.
+    expect(received[0].towerTypeId).toBe('vira-lata-caramelo');
+    expect(received[1].enemyTypeId).toBe('dois-caras-moto');
+    // O payload nao e fonte de verdade de dano/recompensa/vida.
+    for (const payload of received) {
+      expect(payload).not.toHaveProperty('damage');
+      expect(payload).not.toHaveProperty('reward');
+      expect(payload).not.toHaveProperty('lives');
+      expect(payload.occurredAtMs).toBeGreaterThan(0);
+    }
+  });
+
+  it('nao entrega mais nada depois que o consumidor sai (C5: reset nao duplica listener)', () => {
+    let calls = 0;
+    const listener = (): void => {
+      calls++;
+    };
+
+    onGameEvent(GameEvents.COMBAT_AUDIO_EVENT, listener);
+    emitGameEvent(GameEvents.COMBAT_AUDIO_EVENT, {
+      eventId: 'sfx-3',
+      category: 'enemy-damaged',
+      enemyTypeId: 'dois-caras-moto',
+      occurredAtMs: 10,
+    });
+    offGameEvent(GameEvents.COMBAT_AUDIO_EVENT, listener);
+    emitGameEvent(GameEvents.COMBAT_AUDIO_EVENT, {
+      eventId: 'sfx-4',
+      category: 'enemy-damaged',
+      enemyTypeId: 'dois-caras-moto',
+      occurredAtMs: 20,
+    });
+
+    expect(calls).toBe(1);
+    expect(EventBus.listenerCount(GameEvents.COMBAT_AUDIO_EVENT)).toBe(0);
+  });
+
+  it('cobre as quatro categorias audiveis do combate', () => {
+    const categories: CombatSfxCategory[] = [
+      'tower-attack',
+      'enemy-damaged',
+      'enemy-killed',
+      'enemy-leaked',
+    ];
+    expect(new Set(categories).size).toBe(4);
+  });
+});
+
+describe('CombatSfxManager como consumidor dos eventos existentes', () => {
+  it('escuta derrota, vazamento, preferencia de audio e reset', () => {
+    const listened = [
+      GameEvents.ENEMY_KILLED,
+      GameEvents.ENEMY_LEAKED,
+      GameEvents.AUDIO_SETTINGS_CHANGED,
+      GameEvents.MATCH_RESET,
+    ] as const;
+
+    for (const event of listened) {
+      expect(
+        EVENT_CATALOG[event].consumers.join(' '),
+        `"${event}" deveria listar o CombatSfxManager como consumidor`,
+      ).toContain('CombatSfxManager');
+    }
+  });
+
+  /**
+   * C3: som de derrota/vazamento e efeito colateral de apresentacao. Recompensa e
+   * dano a base continuam no GameState — mover isso para o audio quebraria o jogo
+   * quando o som falhasse.
+   */
+  it('nao toma para si a recompensa nem o dano a base (C3)', () => {
+    expect(EVENT_CATALOG[GameEvents.ENEMY_KILLED].consumers.join(' ')).toContain('GameState');
+    expect(EVENT_CATALOG[GameEvents.ENEMY_LEAKED].consumers.join(' ')).toContain('GameState');
   });
 });

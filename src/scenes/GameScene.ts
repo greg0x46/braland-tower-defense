@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { GameState } from '../core/GameState';
-import { GameEvents, emitGameEvent } from '../core/EventBus';
+import { GameEvents, emitGameEvent, type CombatAudioSignal } from '../core/EventBus';
 import { PLAY_WIDTH, GAME_HEIGHT, LEAK_DAMAGE } from '../core/constants';
 import { ACTIVE_MAP } from '../data/maps';
 import { ENEMY_TYPES } from '../data/enemies';
@@ -9,6 +9,7 @@ import { Enemy } from '../entities/Enemy';
 import { Tower } from '../entities/Tower';
 import { Projectile } from '../entities/Projectile';
 import { BuildManager } from '../managers/BuildManager';
+import { CombatSfxManager } from '../managers/CombatSfxManager';
 import { WaveManager } from '../managers/WaveManager';
 import { DebugOverlay } from '../debug/DebugOverlay';
 import { describeMapContractErrors, validateMapContract } from '../systems/mapContract';
@@ -27,9 +28,12 @@ export class GameScene extends Phaser.Scene {
 
   private buildManager!: BuildManager;
   private waveManager!: WaveManager;
+  private combatSfx!: CombatSfxManager;
   /** Só instanciado em desenvolvimento (Constitution X). */
   private debug?: DebugOverlay;
   private loggedMapFallback = false;
+  /** Sequência dos eventos audíveis desta partida. Zera junto com a cena. */
+  private combatAudioSeq = 0;
 
   constructor() {
     super('GameScene');
@@ -39,6 +43,7 @@ export class GameScene extends Phaser.Scene {
     this.enemies = [];
     this.towers = [];
     this.projectiles = [];
+    this.combatAudioSeq = 0;
     this.cameras.main.roundPixels = true;
 
     if (import.meta.env.DEV) this.validateMap();
@@ -46,6 +51,11 @@ export class GameScene extends Phaser.Scene {
 
     this.buildManager = new BuildManager(this, () => this.towers, this.placeTower);
     this.waveManager = new WaveManager(this.spawnEnemy, () => this.enemies.length);
+
+    // O SFX de combate pertence ao ciclo de vida da partida (ao contrário da trilha,
+    // que vive na BootScene): reiniciar precisa levar junto os sons e os listeners.
+    this.combatSfx = new CombatSfxManager(this);
+    this.combatSfx.start();
 
     if (import.meta.env.DEV) {
       this.debug = new DebugOverlay(this, {
@@ -104,7 +114,9 @@ export class GameScene extends Phaser.Scene {
   };
 
   private placeTower = (x: number, y: number, type: TowerType): void => {
-    const tower = new Tower(this, x, y, type, this.fire).setDepth(DEPTH.tower) as Tower;
+    const tower = new Tower(this, x, y, type, this.fire, this.announceCombatAudio).setDepth(
+      DEPTH.tower,
+    ) as Tower;
     this.towers.push(tower);
   };
 
@@ -114,12 +126,35 @@ export class GameScene extends Phaser.Scene {
     target: Enemy,
     damage: number,
     speed: number,
+    towerTypeId: string,
     visual?: ProjectileVisualSpec,
   ): void => {
-    const p = new Projectile(this, x, y, target, damage, speed, visual).setDepth(
-      DEPTH.projectile,
-    ) as Projectile;
+    const p = new Projectile(
+      this,
+      x,
+      y,
+      target,
+      damage,
+      speed,
+      towerTypeId,
+      visual,
+      this.announceCombatAudio,
+    ).setDepth(DEPTH.projectile) as Projectile;
     this.projectiles.push(p);
+  };
+
+  /**
+   * Completa o que a entidade não deve saber — id do evento e relógio — e publica.
+   * A torre e o projétil dizem apenas *o que fizeram*; quem transforma isso em som é
+   * o `CombatSfxManager`, do outro lado do EventBus (Constitution IV).
+   */
+  private announceCombatAudio = (signal: CombatAudioSignal): void => {
+    this.combatAudioSeq++;
+    emitGameEvent(GameEvents.COMBAT_AUDIO_EVENT, {
+      ...signal,
+      eventId: `sfx-${this.combatAudioSeq}`,
+      occurredAtMs: this.time.now,
+    });
   };
 
   // --- Loop principal ---
@@ -168,6 +203,7 @@ export class GameScene extends Phaser.Scene {
   private onShutdown(): void {
     this.buildManager.destroy();
     this.waveManager.destroy();
+    this.combatSfx.destroy();
     this.debug?.destroy();
   }
 }
