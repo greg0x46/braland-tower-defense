@@ -25,6 +25,7 @@ const ORIGIN = { x: 0, y: 0 };
 
 const base = {
   targetRule: 'most-advanced-in-range',
+  engagement: 'stationary',
   damage: 5,
   range: 100,
   cadence: 2,
@@ -189,7 +190,7 @@ describe('contrato de ataque do Vira-lata Caramelo', () => {
 
   it('herda dano, alcance e cadencia dos stats da torre (fonte unica)', () => {
     expect(behavior.damage).toBe(5);
-    expect(behavior.range).toBe(120);
+    expect(behavior.range).toBe(200);
     expect(behavior.cadence).toBe(2);
     expect(cooldownSeconds(behavior)).toBe(0.5);
   });
@@ -198,7 +199,7 @@ describe('contrato de ataque do Vira-lata Caramelo', () => {
     const outcome = resolveAttack(behavior, ORIGIN, [
       target('atras', 50, 10),
       target('na-frente', 100, 80),
-      target('fora-de-alcance', 200, 999),
+      target('fora-de-alcance', 250, 999),
     ]);
 
     if (outcome.kind !== 'direct') throw new Error('esperado direct');

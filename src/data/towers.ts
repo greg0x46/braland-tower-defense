@@ -1,4 +1,5 @@
-import { COLORS, TEXTURES } from '../core/constants';
+import { COLORS, ENGAGEMENT_FALLBACK, TEXTURES } from '../core/constants';
+import type { EngagementTimings } from '../systems/engagement';
 import type { Targetable } from '../systems/targeting';
 
 /* --- Contrato de ataque (gameplay) ------------------------------------------
@@ -21,6 +22,9 @@ export type TargetRule = 'most-advanced-in-range';
  */
 export type VisualCuePolicy = 'none' | 'onCue' | 'onImpact';
 
+/** Como a torre se comporta em relacao ao ataque. */
+export type EngagementProfile = 'stationary' | 'pursuer';
+
 /** Alvo de um ataque. `Enemy` satisfaz estruturalmente. */
 export type AttackTarget = Targetable;
 
@@ -40,6 +44,8 @@ export interface AttackBehaviorSpec {
   kind: AttackKind;
   targetRule: TargetRule;
   visualCuePolicy: VisualCuePolicy;
+  /** Obrigatorio: esquecer o perfil de uma torre nova deve quebrar a compilacao. */
+  engagement: EngagementProfile;
   /** Obrigatório para `kind: 'projectile'`. */
   projectileSpeed?: number;
   /** Obrigatório para `kind: 'area'`. */
@@ -120,6 +126,35 @@ export function attackBehaviorOf(type: TowerType): AttackBehavior {
   };
 }
 
+function stageDurationSec(stage: AttackAnimationStage | undefined): number {
+  if (!stage) return 0;
+  const frameCount = Math.max(1, stage.frames.length);
+  const framesMs = frameCount * Math.max(1, stage.frameDurationMs);
+  return Math.max(framesMs, stage.minDurationMs ?? 0) / 1000;
+}
+
+/** Deriva tempos de engajamento dos dados da animacao, nunca do asset carregado. */
+export function engagementTimingsOf(type: TowerType): EngagementTimings {
+  const animation = type.attackAnimation;
+  if (!animation) return ENGAGEMENT_FALLBACK;
+
+  const prepare = animation.stages.find((stage) => stage.name === 'prepare');
+  const attack = animation.stages.find((stage) => stage.name === 'attack');
+  const strikeSec = stageDurationSec(attack);
+  const cueAtSec =
+    attack?.fireCueFrameIndex === undefined
+      ? 0
+      : Math.min(strikeSec, (attack.fireCueFrameIndex * Math.max(1, attack.frameDurationMs)) / 1000);
+
+  return {
+    prepareSec: stageDurationSec(prepare),
+    strikeSec,
+    cueAtSec,
+    pursuitSpeedPxPerSec: animation.visualSpeedPxPerSec,
+    arrivalDistancePx: animation.arrivalDistancePx,
+  };
+}
+
 export const TOWER_TYPES: Record<string, TowerType> = {
   'vira-lata-caramelo': {
     id: 'vira-lata-caramelo',
@@ -127,7 +162,7 @@ export const TOWER_TYPES: Record<string, TowerType> = {
     emoji: '🐕',
     color: COLORS.towerCaramelo,
     cost: 50,
-    range: 120,
+    range: 200,
     damage: 5,
     fireRate: 2,
     radius: 20,
@@ -138,6 +173,7 @@ export const TOWER_TYPES: Record<string, TowerType> = {
       kind: 'direct',
       targetRule: 'most-advanced-in-range',
       visualCuePolicy: 'onCue',
+      engagement: 'pursuer',
     },
     spriteKey: TEXTURES.towerCaramelo,
     attackAnimation: {

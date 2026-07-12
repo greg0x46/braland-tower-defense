@@ -53,19 +53,18 @@ export const ACCEPTED_CONTRACTS = {
     subject: 'tower',
     acceptedValues: {
       cost: 50,
-      range: 120,
+      range: 200,
       damage: 5,
       fireRate: 2,
       radius: 20,
     },
     reason:
       'Unica torre do prototipo: custo 50 permite duas torres com o dinheiro ' +
-      'inicial (150) e ainda guardar troco; 5 de dano a 2 ataques/s derruba a ' +
-      'moto (20 HP) em 2 s dentro do alcance de 120 px.',
-    changedBy:
-      '007-technical-debt-hardening: removido `projectileSpeed: 420` do contrato. ' +
-      'A torre tem animacao de ataque, entao o runtime sempre aplicava dano direto ' +
-      'na deixa da animacao e jamais criava projetil — o valor era dado morto.',
+      'inicial (150) e ainda guardar troco; 5 de dano a 2 ataques/s continua ' +
+      'inalterado. O alcance de 200 px cobre ~4,4 s da pista contra ~2,3 s com ' +
+      '120 px para o motoboy a 90 px/s, criando janela para 2+ mordidas ' +
+      'encadeadas dentro da coleira sem alterar dano/custo/cadencia.',
+    changedBy: '009-engajamento-ataque-torre',
   },
   'tower.vira-lata-caramelo.attack-behavior': {
     id: 'tower.vira-lata-caramelo.attack-behavior',
@@ -74,12 +73,17 @@ export const ACCEPTED_CONTRACTS = {
       kind: 'direct',
       targetRule: 'most-advanced-in-range',
       visualCuePolicy: 'onCue',
+      engagement: 'pursuer',
     },
     reason:
       'Corpo-a-corpo: o Caramelo corre ate o alvo mais avancado no alcance e morde. ' +
       'E o comportamento que o jogo ja entregava com os assets presentes; agora ele ' +
       'esta declarado no dado em vez de emergir da existencia de um sprite. Sem a ' +
-      'animacao, a mordida sai no tempo de fallback com o mesmo dano.',
+      'animacao, a mordida sai no tempo de fallback com o mesmo dano. Como cao solto ' +
+      'na coleira, o perfil pursuer permite sair da base, encadear alvos dentro do ' +
+      'alcance medido da base e voltar quando o caminho esvazia; trocar para ' +
+      'stationary devolve o comportamento antigo por dado, sem mudar sistemas.',
+    changedBy: '009-engajamento-ataque-torre',
   },
   'wave.progression-profile': {
     id: 'wave.progression-profile',

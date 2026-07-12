@@ -24,6 +24,7 @@ const C = {
   path: 0x00e5ff,
   pathArea: 0x002b36,
   range: 0xffb300,
+  pursuer: 0x00e676,
   target: 0xff1744,
   hitbox: 0x76ff03,
 } as const;
@@ -121,6 +122,10 @@ export class DebugOverlay {
       for (const tower of towers) {
         this.gfx.lineStyle(1, C.range, 0.7);
         this.gfx.strokeCircle(tower.x, tower.y, tower.def.range);
+        this.gfx.fillStyle(C.pursuer, 0.85);
+        this.gfx.fillCircle(tower.engagementX, tower.engagementY, 4);
+        this.gfx.lineStyle(1, C.pursuer, 0.7);
+        this.gfx.lineBetween(tower.x, tower.y, tower.engagementX, tower.engagementY);
         const target = pickMostAdvancedInRange(tower.x, tower.y, tower.def.range, enemies);
         if (target) {
           this.gfx.lineStyle(2, C.target, 0.9);

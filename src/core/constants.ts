@@ -37,6 +37,19 @@ export const AUDIO = {
   storageKey: 'br-td:audio',
 } as const;
 
+/**
+ * Timings usados quando uma torre nao declara `attackAnimation`. Mantem gameplay
+ * testavel e independente de textura: a apresentacao pode falhar sem desligar
+ * dano, cadencia, encadeamento ou retorno.
+ */
+export const ENGAGEMENT_FALLBACK = {
+  prepareSec: 0.12,
+  strikeSec: 0.16,
+  cueAtSec: 0,
+  pursuitSpeedPxPerSec: 520,
+  arrivalDistancePx: 22,
+} as const;
+
 /** Chaves das texturas placeholder geradas em BootScene. */
 export const TEXTURES = {
   circle: 'tex-circle',

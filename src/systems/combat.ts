@@ -33,27 +33,27 @@ export function appliesOnCue(behavior: AttackBehavior): boolean {
 }
 
 /**
- * Alvo válido = vivo e dentro do alcance. Revalidado antes de aplicar dano, para
- * um alvo que morreu ou vazou durante a animação não ser atingido.
+ * Alvo valido = vivo e dentro do alcance medido da base fixa da torre. A posicao
+ * corrente de um perseguidor nunca expande a area de mira.
  */
 export function isTargetValid(
   behavior: AttackBehavior,
-  origin: Origin,
+  base: Origin,
   target: AttackTarget,
 ): boolean {
   if (!target.alive) return false;
-  const dx = target.x - origin.x;
-  const dy = target.y - origin.y;
+  const dx = target.x - base.x;
+  const dy = target.y - base.y;
   return dx * dx + dy * dy <= behavior.range * behavior.range;
 }
 
-/** Aplica a regra de alvo do comportamento. */
+/** Aplica a regra de alvo do comportamento, sempre a partir da base da torre. */
 export function acquireTarget<T extends AttackTarget>(
   behavior: AttackBehavior,
-  origin: Origin,
+  base: Origin,
   candidates: readonly T[],
 ): T | null {
-  return pickMostAdvancedInRange(origin.x, origin.y, behavior.range, candidates);
+  return pickMostAdvancedInRange(base.x, base.y, behavior.range, candidates);
 }
 
 /** Alvos dentro da área, do mais avançado para o menos, respeitando `maxTargets`. */
