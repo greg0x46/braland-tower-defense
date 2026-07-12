@@ -5,13 +5,16 @@ import { MusicManager } from '../managers/MusicManager';
 import {
   CARAMELO_SPRITE_SHEET,
   formatSpriteSheetErrors,
+  MAE_DE_HAVAIANAS_SPRITE_SHEET,
   MOTOBOY_SPRITE_SHEET,
   resolveSpriteSheetSpec,
+  type SpriteSheetSpec,
 } from '../core/spriteSheets';
 import initialMapUrl from '../assets/maps/initial-map.png';
-import motoboySheetUrl from '../assets/enemies/dois-caras-numa-moto-sheet.png';
-import caramelUrl from '../assets/towers/vira-lata-caramelo.png';
-import caramelSheetUrl from '../assets/towers/vira-lata-caramelo-sheet.png';
+import motoboySheetUrl from '../assets/enemies/dois-caras-numa-moto/dois-caras-numa-moto-sheet.png';
+import caramelUrl from '../assets/towers/vira-lata-caramelo/vira-lata-caramelo.png';
+import caramelSheetUrl from '../assets/towers/vira-lata-caramelo/vira-lata-caramelo-sheet.png';
+import maeDeHavaianasSheetUrl from '../assets/towers/mae-de-havaianas/mae-de-havaianas-sheet.png';
 
 /**
  * Cena de entrada. Carrega centralmente os sprites das torres (o restante do
@@ -37,6 +40,7 @@ export class BootScene extends Phaser.Scene {
     this.loadImage(TEXTURES.initialMap, initialMapUrl);
     this.loadImage(TEXTURES.towerCaramelo, caramelUrl);
     this.loadImage(CARAMELO_SPRITE_SHEET.rawTextureKey, caramelSheetUrl);
+    this.loadImage(MAE_DE_HAVAIANAS_SPRITE_SHEET.rawTextureKey, maeDeHavaianasSheetUrl);
 
     // Carrega a imagem crua; o recorte público só é materializado em create()
     // após validar a grade contra as dimensões reais do asset.
@@ -70,6 +74,12 @@ export class BootScene extends Phaser.Scene {
           );
           return;
         }
+        if (file.key === MAE_DE_HAVAIANAS_SPRITE_SHEET.rawTextureKey) {
+          console.error(
+            `[BootScene] Falha ao carregar sprite sheet "${file.key}" (${file.url}); Mãe de Havaianas usará fallback visual jogável.`,
+          );
+          return;
+        }
         console.error(
           `[BootScene] Falha ao carregar asset "${file.key}" (${file.url}).`,
         );
@@ -84,8 +94,9 @@ export class BootScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.materializeMotoboySpriteSheet();
-    this.materializeCarameloSpriteSheet();
+    this.materializeSpriteSheet(MOTOBOY_SPRITE_SHEET, 'Enemy');
+    this.materializeSpriteSheet(CARAMELO_SPRITE_SHEET, 'Vira-lata Caramelo');
+    this.materializeSpriteSheet(MAE_DE_HAVAIANAS_SPRITE_SHEET, 'Mãe de Havaianas');
     this.registerAnimations();
     this.startBackgroundMusic();
     GameState.reset();
@@ -113,11 +124,10 @@ export class BootScene extends Phaser.Scene {
     this.music.start();
   }
 
-  private materializeMotoboySpriteSheet(): void {
-    const spec = MOTOBOY_SPRITE_SHEET;
+  private materializeSpriteSheet(spec: SpriteSheetSpec, ownerLabel: string): void {
     if (!this.textures.exists(spec.rawTextureKey)) {
       console.error(
-        `[BootScene] Sprite sheet crua "${spec.rawTextureKey}" ausente; Enemy usará fallback círculo+emoji.`,
+        `[BootScene] Sprite sheet crua "${spec.rawTextureKey}" ausente; ${ownerLabel} usará fallback círculo+emoji.`,
       );
       return;
     }
@@ -126,39 +136,7 @@ export class BootScene extends Phaser.Scene {
     const source = rawTexture.getSourceImage();
     if (!(source instanceof HTMLImageElement)) {
       console.error(
-        `[BootScene] Sprite sheet "${spec.rawTextureKey}" não veio de uma imagem HTML; Enemy usará fallback círculo+emoji.`,
-      );
-      return;
-    }
-    const result = resolveSpriteSheetSpec(spec, source.width, source.height);
-
-    if (!result.ok) {
-      if (this.textures.exists(spec.textureKey)) this.textures.remove(spec.textureKey);
-      console.error(`[BootScene] ${formatSpriteSheetErrors(result)}`);
-      return;
-    }
-
-    if (this.textures.exists(spec.textureKey)) this.textures.remove(spec.textureKey);
-    this.textures.addSpriteSheet(spec.textureKey, source, {
-      frameWidth: result.spec.frameWidth,
-      frameHeight: result.spec.frameHeight,
-    });
-  }
-
-  private materializeCarameloSpriteSheet(): void {
-    const spec = CARAMELO_SPRITE_SHEET;
-    if (!this.textures.exists(spec.rawTextureKey)) {
-      console.error(
-        `[BootScene] Sprite sheet crua "${spec.rawTextureKey}" ausente; Vira-lata Caramelo usará fallback visual jogável.`,
-      );
-      return;
-    }
-
-    const rawTexture = this.textures.get(spec.rawTextureKey);
-    const source = rawTexture.getSourceImage();
-    if (!(source instanceof HTMLImageElement)) {
-      console.error(
-        `[BootScene] Sprite sheet "${spec.rawTextureKey}" não veio de uma imagem HTML; Vira-lata Caramelo usará fallback visual jogável.`,
+        `[BootScene] Sprite sheet "${spec.rawTextureKey}" não veio de uma imagem HTML; ${ownerLabel} usará fallback círculo+emoji.`,
       );
       return;
     }
@@ -182,20 +160,25 @@ export class BootScene extends Phaser.Scene {
    * Só cria se a textura carregou — sem sheet, o inimigo cai no fallback emoji.
    */
   private registerAnimations(): void {
-    const spec = MOTOBOY_SPRITE_SHEET;
-    if (!this.textures.exists(spec.textureKey)) return;
+    for (const spec of [
+      MOTOBOY_SPRITE_SHEET,
+      CARAMELO_SPRITE_SHEET,
+      MAE_DE_HAVAIANAS_SPRITE_SHEET,
+    ]) {
+      if (!this.textures.exists(spec.textureKey)) continue;
 
-    for (const animation of spec.animations) {
-      if (this.anims.exists(animation.key)) continue;
-      this.anims.create({
-        key: animation.key,
-        frames: this.anims.generateFrameNumbers(spec.textureKey, {
-          start: animation.start,
-          end: animation.end,
-        }),
-        frameRate: animation.frameRate,
-        repeat: animation.repeat,
-      });
+      for (const animation of spec.animations) {
+        if (this.anims.exists(animation.key)) continue;
+        this.anims.create({
+          key: animation.key,
+          frames: this.anims.generateFrameNumbers(spec.textureKey, {
+            start: animation.start,
+            end: animation.end,
+          }),
+          frameRate: animation.frameRate,
+          repeat: animation.repeat,
+        });
+      }
     }
   }
 }

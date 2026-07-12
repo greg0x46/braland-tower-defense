@@ -85,6 +85,37 @@ export const ACCEPTED_CONTRACTS = {
       'stationary devolve o comportamento antigo por dado, sem mudar sistemas.',
     changedBy: '009-engajamento-ataque-torre',
   },
+  'tower.mae-de-havaianas.base-stats': {
+    id: 'tower.mae-de-havaianas.base-stats',
+    subject: 'tower',
+    acceptedValues: {
+      cost: 140,
+      range: 420,
+      damage: 18,
+      fireRate: 0.55,
+      radius: 22,
+    },
+    reason:
+      'Torre de elite: custa quase tres Caramelos, cobre area muito maior, bate ' +
+      'forte e ataca devagar para nao substituir o Caramelo em custo-beneficio. ' +
+      'O raio visual ligeiramente maior acomoda a personagem sem mudar pathing.',
+    changedBy: 'generalizacao-animacao-mae-havaianas',
+  },
+  'tower.mae-de-havaianas.attack-behavior': {
+    id: 'tower.mae-de-havaianas.attack-behavior',
+    subject: 'attack-behavior',
+    acceptedValues: {
+      kind: 'projectile',
+      targetRule: 'highest-current-health-in-range',
+      visualCuePolicy: 'onCue',
+      engagement: 'stationary',
+    },
+    reason:
+      'A Mãe de Havaianas é uma atiradora de elite: fica na base, arremessa à ' +
+      'distância e sempre prioriza o inimigo vivo com maior vida atual dentro do ' +
+      'alcance, usando o avanço no caminho apenas como desempate.',
+    changedBy: 'generalizacao-animacao-mae-havaianas',
+  },
   'wave.progression-profile': {
     id: 'wave.progression-profile',
     subject: 'wave-profile',

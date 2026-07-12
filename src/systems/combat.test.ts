@@ -15,10 +15,17 @@ interface TestTarget {
   y: number;
   alive: boolean;
   distanceTravelled: number;
+  currentHp: number;
 }
 
-function target(id: string, x: number, distanceTravelled: number, alive = true): TestTarget {
-  return { id, x, y: 0, alive, distanceTravelled };
+function target(
+  id: string,
+  x: number,
+  distanceTravelled: number,
+  alive = true,
+  currentHp = 10,
+): TestTarget {
+  return { id, x, y: 0, alive, distanceTravelled, currentHp };
 }
 
 const ORIGIN = { x: 0, y: 0 };
@@ -54,6 +61,12 @@ const AREA: AttackBehavior = {
   area: { radius: 30 },
 };
 
+const ELITE_PROJECTILE: AttackBehavior = {
+  ...PROJECTILE,
+  id: 'test-elite-projectile',
+  targetRule: 'highest-current-health-in-range',
+};
+
 describe('categorias de ataque', () => {
   it('projectile: cria um projétil contra o alvo mais avançado', () => {
     const outcome = resolveAttack(PROJECTILE, ORIGIN, [target('a', 50, 10), target('b', 60, 90)]);
@@ -61,6 +74,21 @@ describe('categorias de ataque', () => {
     expect(outcome).toEqual({
       kind: 'projectile',
       target: expect.objectContaining({ id: 'b' }),
+      damage: 5,
+      speed: 400,
+    });
+  });
+
+  it('projectile: pode priorizar o alvo com maior vida atual dentro do alcance', () => {
+    const outcome = resolveAttack(ELITE_PROJECTILE, ORIGIN, [
+      target('avancado-fraco', 50, 999, true, 3),
+      target('tanque', 70, 10, true, 80),
+      target('fora', 150, 1, true, 200),
+    ]);
+
+    expect(outcome).toEqual({
+      kind: 'projectile',
+      target: expect.objectContaining({ id: 'tanque' }),
       damage: 5,
       speed: 400,
     });
@@ -205,5 +233,27 @@ describe('contrato de ataque do Vira-lata Caramelo', () => {
     if (outcome.kind !== 'direct') throw new Error('esperado direct');
     expect(outcome.targets.map((t) => t.id)).toEqual(['na-frente']);
     expect(outcome.damage).toBe(5);
+  });
+});
+
+describe('contrato de ataque da Mãe de Havaianas', () => {
+  const behavior = attackBehaviorOf(TOWER_TYPES['mae-de-havaianas']);
+
+  it('e projectile com deixa visual e mira no maior HP atual', () => {
+    expect(behavior.kind).toBe('projectile');
+    expect(behavior.visualCuePolicy).toBe('onCue');
+    expect(behavior.targetRule).toBe('highest-current-health-in-range');
+  });
+
+  it('resolve o arremesso no alvo vivo com maior vida atual dentro do alcance', () => {
+    const outcome = resolveAttack(behavior, ORIGIN, [
+      target('mais-avancado', 100, 999, true, 4),
+      target('maior-vida', 120, 10, true, 30),
+      target('fora-do-alcance', 500, 5, true, 200),
+    ]);
+
+    if (outcome.kind !== 'projectile') throw new Error('esperado projectile');
+    expect(outcome.target.id).toBe('maior-vida');
+    expect(outcome.damage).toBe(18);
   });
 });

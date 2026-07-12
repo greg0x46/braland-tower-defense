@@ -3,6 +3,7 @@ import {
   attackBehaviorOf,
   engagementTimingsOf,
   type AttackBehavior,
+  type ProjectileVisualSpec,
   type TowerType,
 } from '../data/towers';
 import type { Enemy } from './Enemy';
@@ -31,6 +32,7 @@ export type FireFn = (
   target: Enemy,
   damage: number,
   speed: number,
+  visual?: ProjectileVisualSpec,
 ) => void;
 
 /**
@@ -200,6 +202,7 @@ export class Tower extends Phaser.GameObjects.Container {
           outcome.target,
           outcome.damage,
           outcome.speed,
+          this.def.projectileVisual,
         );
         return;
 

@@ -1,14 +1,19 @@
 import Phaser from 'phaser';
 import type {
   AttackAnimationDefinition,
-  AttackAnimationStageName,
   AttackAnimationStage,
   AttackTarget,
   SpriteFrameRef,
 } from '../data/towers';
 import type { Origin } from '../systems/combat';
 import type { EngagementState } from '../systems/engagement';
-import { animationFrameIndexAt } from '../systems/animationFrames';
+import {
+  createVisualStateMachine,
+  updateVisualStateMachine,
+  type VisualCueEvent,
+  type VisualStateMachineConfig,
+  type VisualStateMachineState,
+} from '../systems/visualStateMachine';
 
 const ORIENTATION_DEADZONE_PX = 2;
 
@@ -30,10 +35,12 @@ export class TowerAttackAnimator {
   private readonly spriteDisplayWidth: number;
   private readonly idleSpriteKey?: string;
   private readonly idleFrame?: SpriteFrameRef;
+  private readonly machine: VisualStateMachineState;
+  private readonly machineConfig: VisualStateMachineConfig;
   private readonly loggedMissingFrames = new Set<string>();
   private readonly loggedMissingStages = new Set<string>();
 
-  private stageName: AttackAnimationStageName | null = null;
+  private animationId: string | null = null;
   private frameIndex = -1;
   private currentFrames: SpriteFrameRef[] = [];
   private facingX: 1 | -1 = 1;
@@ -46,54 +53,58 @@ export class TowerAttackAnimator {
     this.spriteDisplayWidth = options.spriteDisplayWidth;
     this.idleSpriteKey = options.idleSpriteKey;
     this.idleFrame = options.idleFrame;
+    this.machine = createVisualStateMachine();
+    this.machineConfig = {
+      stateToAnimation: this.definition.stateMap,
+      fallbackAnimationId: this.definition.stateMap.idle,
+      animations: this.definition.stages.map((stage) => ({
+        id: stage.name,
+        kind: stage.kind,
+        frameCount: Math.max(1, stage.frames.length),
+        frameDurationMs: stage.frameDurationMs,
+        cueFrameIndex: stage.cueFrameIndex,
+        cueName: stage.cueName,
+        minDurationMs: stage.minDurationMs,
+      })),
+    };
     this.resetVisual();
   }
 
-  render<T extends AttackTarget>(state: EngagementState<T>, base: Origin): void {
+  render<T extends AttackTarget>(
+    state: EngagementState<T>,
+    base: Origin,
+  ): readonly VisualCueEvent[] {
     this.visualRoot.setPosition(state.x - base.x, state.y - base.y);
 
-    const stageName = this.stageForPhase(state);
-    if (!stageName) {
+    const update = updateVisualStateMachine(
+      this.machineConfig,
+      this.machine,
+      state.phase.kind,
+      state.phaseElapsedSec * 1000,
+    );
+    if (!update.animationId) {
       this.resetVisual();
-      return;
+      return update.cues;
     }
 
-    const stage = this.resolveStage(stageName);
+    const stage = this.resolveStage(update.animationId);
     if (!stage) {
       this.resetVisual();
-      return;
+      return update.cues;
     }
 
-    if (this.stageName !== stageName) {
-      this.stageName = stageName;
+    if (this.animationId !== update.animationId) {
+      this.animationId = update.animationId;
       this.frameIndex = -1;
       this.currentFrames = this.resolveFrames(stage);
     }
 
     this.applyOrientation(state, base);
-    this.displayFrame(this.frameIndexFor(stage, state.phaseElapsedSec));
+    this.displayFrame(update.frameIndex);
+    return update.cues;
   }
 
-  private stageForPhase<T extends AttackTarget>(
-    state: EngagementState<T>,
-  ): AttackAnimationStageName {
-    switch (state.phase.kind) {
-      case 'lying_idle':
-        return 'lying_idle';
-      case 'standing_up':
-        return 'standing_up';
-      case 'chasing':
-        return 'chasing';
-      case 'biting':
-        return 'biting';
-      case 'returning':
-        return 'returning';
-      case 'lying_down':
-        return 'lying_down';
-    }
-  }
-
-  private resolveStage(name: AttackAnimationStageName): AttackAnimationStage | null {
+  private resolveStage(name: string): AttackAnimationStage | null {
     return this.definition.stages.find((stage) => stage.name === name) ?? null;
   }
 
@@ -164,15 +175,6 @@ export class TowerAttackAnimator {
     return null;
   }
 
-  private frameIndexFor(stage: AttackAnimationStage, phaseElapsedSec: number): number {
-    return animationFrameIndexAt(
-      stage.kind,
-      this.currentFrames.length,
-      stage.frameDurationMs,
-      phaseElapsedSec,
-    );
-  }
-
   private displayFrame(index: number): void {
     if (index === this.frameIndex) return;
     this.frameIndex = index;
@@ -205,20 +207,20 @@ export class TowerAttackAnimator {
     base: Origin,
   ): Origin | null {
     switch (state.phase.kind) {
-      case 'standing_up':
-      case 'chasing':
-      case 'biting':
+      case 'windup':
+      case 'moving':
+      case 'attacking':
         return state.phase.target;
       case 'returning':
         return base;
-      case 'lying_down':
-      case 'lying_idle':
+      case 'recovering':
+      case 'idle':
         return null;
     }
   }
 
   private resetVisual(): void {
-    this.stageName = null;
+    this.animationId = null;
     this.frameIndex = -1;
     this.currentFrames = [];
     this.facingX = 1;

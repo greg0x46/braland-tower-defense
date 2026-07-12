@@ -36,16 +36,16 @@ Exemplo para uma imagem `1774x887` que deveria ser uma sheet `8x2`:
 
 ```bash
 npm run adjust:sprite-sheet -- \
-  src/assets/enemies/dois-caras-numa-moto-sheet.png \
-  src/assets/enemies/dois-caras-numa-moto-sheet-fixed.png \
+  src/assets/enemies/dois-caras-numa-moto/dois-caras-numa-moto-sheet.png \
+  /tmp/dois-caras-numa-moto-sheet-fixed.png \
   --source-cols 8 \
   --source-rows 2 \
   --frame-width 256 \
-  --frame-height 512 \
+  --frame-height 256 \
   --output-cols 8
 ```
 
-Esse comando gera uma sheet limpa `2048x1024`, com 16 frames de `256x512`.
+Esse comando gera uma sheet limpa `2048x512`, com 16 frames de `256x256`.
 Se substituir o asset usado pelo jogo, o runtime deriva `frameWidth` e
 `frameHeight` do contrato central em `src/core/spriteSheets.ts`; não coloque
 dimensões hardcoded no `BootScene`.
@@ -56,15 +56,16 @@ fragmentos vazados do vizinho e recentraliza com margem interna:
 
 ```bash
 npm run adjust:sprite-sheet -- \
-  raw/dois-caras-numa-moto-sheet.png \
-  src/assets/enemies/dois-caras-numa-moto-sheet.png \
+  src/assets/enemies/dois-caras-numa-moto/dois-caras-numa-moto-sheet.png \
+  src/assets/enemies/dois-caras-numa-moto/dois-caras-numa-moto-sheet.png \
   --source-cols 8 \
   --source-rows 2 \
   --frame-width 256 \
-  --frame-height 512 \
+  --frame-height 256 \
   --output-cols 8 \
   --extract-mode main-component \
-  --component-frame-padding 20 \
+  --component-frame-padding 14 \
+  --anchor-y 0.55 \
   --preview-grid /tmp/motoboy-grid.png \
   --validate-frame-edges \
   --edge-margin 1
@@ -73,14 +74,14 @@ npm run adjust:sprite-sheet -- \
 Confira o preview com grade antes de substituir o asset final. Nenhuma parte da
 arte deve tocar as linhas vermelhas.
 
-Para o Vira-lata Caramelo, a fonte bruta na raiz do projeto é uma PNG RGB com
+Para o Vira-lata Caramelo, a fonte bruta versionada em `src/assets/towers` é uma PNG RGB com
 checkerboard desenhado (`1774x887`, grade visual `8x4`). Gere a sheet final
 `2048x1024` (`32` frames de `256x256`) com alpha real assim:
 
 ```bash
 npm run adjust:sprite-sheet -- \
-  "ChatGPT Image Jul 12, 2026, 01_14_06 AM.png" \
-  src/assets/towers/vira-lata-caramelo-sheet.png \
+  src/assets/towers/vira-lata-caramelo/vira-lata-caramelo-raw.png \
+  src/assets/towers/vira-lata-caramelo/vira-lata-caramelo-sheet.png \
   --source-cols 8 \
   --source-rows 4 \
   --frame-width 256 \
@@ -90,6 +91,26 @@ npm run adjust:sprite-sheet -- \
   --extract-mode main-component \
   --component-frame-padding 18 \
   --preview-grid /tmp/caramelo-grid.png \
+  --validate-frame-edges \
+  --edge-margin 1
+```
+
+A Mãe de Havaianas segue o mesmo formato `8x4`, com fonte e sheet final em:
+
+```bash
+npm run adjust:sprite-sheet -- \
+  src/assets/towers/mae-de-havaianas/mae-de-havaianas-raw.png \
+  src/assets/towers/mae-de-havaianas/mae-de-havaianas-sheet.png \
+  --source-cols 8 \
+  --source-rows 4 \
+  --frame-width 256 \
+  --frame-height 256 \
+  --output-cols 8 \
+  --transparent-checkerboard \
+  --extract-mode main-component \
+  --component-frame-padding 16 \
+  --anchor-y 0.58 \
+  --preview-grid /tmp/mae-de-havaianas-grid.png \
   --validate-frame-edges \
   --edge-margin 1
 ```

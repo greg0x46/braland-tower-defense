@@ -175,6 +175,10 @@ export class Enemy extends Phaser.GameObjects.Container {
     return this.status === 'alive';
   }
 
+  get currentHp(): number {
+    return this.hp;
+  }
+
   takeDamage(amount: number): void {
     if (this.status !== 'alive') return;
     this.hp = Math.max(0, this.hp - amount);

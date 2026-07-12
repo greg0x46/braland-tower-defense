@@ -29,7 +29,7 @@ export const ENEMY_TYPES: Record<string, EnemyType> = {
     maxHp: 20,
     speed: 90,
     reward: 8,
-    radius: 25,
+    radius: 20,
     spriteKey: TEXTURES.enemyMotoboy,
   },
 };

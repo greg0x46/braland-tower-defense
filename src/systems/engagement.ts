@@ -21,13 +21,21 @@ export interface EngagementConfig {
   base: Origin;
 }
 
+export type EngagementPhaseKind =
+  | 'idle'
+  | 'windup'
+  | 'moving'
+  | 'attacking'
+  | 'returning'
+  | 'recovering';
+
 export type EngagementPhase<T> =
-  | { kind: 'lying_idle' }
-  | { kind: 'standing_up'; target: T }
-  | { kind: 'chasing'; target: T }
-  | { kind: 'biting'; target: T }
+  | { kind: 'idle' }
+  | { kind: 'windup'; target: T }
+  | { kind: 'moving'; target: T }
+  | { kind: 'attacking'; target: T }
   | { kind: 'returning' }
-  | { kind: 'lying_down' };
+  | { kind: 'recovering' };
 
 export interface EngagementState<T> {
   phase: EngagementPhase<T>;
@@ -49,7 +57,7 @@ export function createEngagementState<T extends AttackTarget>(
   base: Origin,
 ): EngagementState<T> {
   return {
-    phase: { kind: 'lying_idle' },
+    phase: { kind: 'idle' },
     x: base.x,
     y: base.y,
     phaseElapsedSec: 0,
@@ -74,13 +82,13 @@ export function stepEngagement<T extends AttackTarget>(
     transitions++;
 
     switch (state.phase.kind) {
-      case 'lying_idle': {
+      case 'idle': {
         setPosition(state, config.base);
         if (config.behavior.engagement === 'stationary') setPosition(state, config.base);
 
         const target = acquireTarget(config.behavior, config.base, candidates);
         if (target && state.cooldownSec <= EPSILON) {
-          enterPhase(state, { kind: 'standing_up', target });
+          enterPhase(state, { kind: 'windup', target });
           continue;
         }
 
@@ -89,10 +97,10 @@ export function stepEngagement<T extends AttackTarget>(
         break;
       }
 
-      case 'standing_up': {
+      case 'windup': {
         const target = validCurrentOrReplacement(config, state.phase.target, candidates);
         if (!target) {
-          enterPhase(state, { kind: 'lying_down' });
+          enterPhase(state, { kind: 'recovering' });
           continue;
         }
         if (target !== state.phase.target) state.phase.target = target;
@@ -103,9 +111,9 @@ export function stepEngagement<T extends AttackTarget>(
         const untilStanding = standUpSec - state.phaseElapsedSec;
         if (untilStanding <= EPSILON) {
           if (config.behavior.engagement === 'stationary') {
-            enterBiting(config, state, target);
+            enterAttacking(config, state, target);
           } else {
-            enterPhase(state, { kind: 'chasing', target });
+            enterPhase(state, { kind: 'moving', target });
           }
           continue;
         }
@@ -117,9 +125,9 @@ export function stepEngagement<T extends AttackTarget>(
         break;
       }
 
-      case 'chasing': {
+      case 'moving': {
         if (config.behavior.engagement === 'stationary') {
-          enterPhase(state, { kind: 'lying_idle' });
+          enterPhase(state, { kind: 'idle' });
           continue;
         }
 
@@ -131,7 +139,7 @@ export function stepEngagement<T extends AttackTarget>(
         if (target !== state.phase.target) state.phase.target = target;
 
         if (hasArrived(config, state, target) && state.cooldownSec <= EPSILON) {
-          enterBiting(config, state, target);
+          enterAttacking(config, state, target);
           continue;
         }
 
@@ -156,7 +164,7 @@ export function stepEngagement<T extends AttackTarget>(
         break;
       }
 
-      case 'biting': {
+      case 'attacking': {
         const targetIsValid = isCurrentTargetValid(config, state.phase.target, candidates);
         if (!state.strikeEmitted && !targetIsValid) {
           transitionAfterBite(config, state, candidates);
@@ -188,11 +196,11 @@ export function stepEngagement<T extends AttackTarget>(
             continue;
           }
           if (config.behavior.engagement === 'pursuer' && !hasArrived(config, state, target)) {
-            enterPhase(state, { kind: 'chasing', target });
+            enterPhase(state, { kind: 'moving', target });
             continue;
           }
           if (state.cooldownSec <= EPSILON) {
-            enterBiting(config, state, target);
+            enterAttacking(config, state, target);
             continue;
           }
 
@@ -218,13 +226,13 @@ export function stepEngagement<T extends AttackTarget>(
         break;
       }
 
-      case 'lying_down': {
+      case 'recovering': {
         setPosition(state, config.base);
 
         const lieDownSec = Math.max(0, config.timings.lieDownSec);
         const untilLying = lieDownSec - state.phaseElapsedSec;
         if (untilLying <= EPSILON) {
-          enterPhase(state, { kind: 'lying_idle' });
+          enterPhase(state, { kind: 'idle' });
           continue;
         }
 
@@ -239,19 +247,19 @@ export function stepEngagement<T extends AttackTarget>(
 
       case 'returning': {
         if (config.behavior.engagement === 'stationary') {
-          enterPhase(state, { kind: 'lying_idle' });
+          enterPhase(state, { kind: 'idle' });
           continue;
         }
 
         const target = acquireTarget(config.behavior, config.base, candidates);
         if (target) {
-          enterPhase(state, { kind: 'chasing', target });
+          enterPhase(state, { kind: 'moving', target });
           continue;
         }
 
         if (distance(state, config.base) <= EPSILON) {
           setPosition(state, config.base);
-          enterPhase(state, { kind: 'lying_down' });
+          enterPhase(state, { kind: 'recovering' });
           continue;
         }
 
@@ -266,7 +274,7 @@ export function stepEngagement<T extends AttackTarget>(
 
         if (distance(state, config.base) <= EPSILON) {
           setPosition(state, config.base);
-          enterPhase(state, { kind: 'lying_down' });
+          enterPhase(state, { kind: 'recovering' });
           continue;
         }
 
@@ -294,12 +302,12 @@ function enterPhase<T>(state: EngagementState<T>, phase: EngagementPhase<T>): vo
   state.strikeEmitted = false;
 }
 
-function enterBiting<T extends AttackTarget>(
+function enterAttacking<T extends AttackTarget>(
   config: EngagementConfig,
   state: EngagementState<T>,
   target: T,
 ): void {
-  enterPhase(state, { kind: 'biting', target });
+  enterPhase(state, { kind: 'attacking', target });
   state.cooldownSec = cooldownSeconds(config.behavior);
 }
 
@@ -309,12 +317,12 @@ function transitionAfterBite<T extends AttackTarget>(
   candidates: readonly T[],
 ): void {
   if (config.behavior.engagement === 'stationary') {
-    enterPhase(state, { kind: 'lying_idle' });
+    enterPhase(state, { kind: 'idle' });
     return;
   }
 
   const target = acquireTarget(config.behavior, config.base, candidates);
-  enterPhase(state, target ? { kind: 'chasing', target } : { kind: 'returning' });
+  enterPhase(state, target ? { kind: 'moving', target } : { kind: 'returning' });
 }
 
 function advanceClock<T>(state: EngagementState<T>, deltaSec: number): void {

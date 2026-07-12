@@ -81,6 +81,24 @@ export const CARAMELO_SPRITE_SHEET: SpriteSheetSpec = {
   },
 } as const;
 
+export const MAE_DE_HAVAIANAS_SPRITE_SHEET: SpriteSheetSpec = {
+  rawTextureKey: `${TEXTURES.towerMaeHavaianasSheet}-raw`,
+  textureKey: TEXTURES.towerMaeHavaianasSheet,
+  columns: 8,
+  rows: 4,
+  animations: [
+    { key: ANIMS.maeHavaianasIdle, start: 0, end: 7, frameRate: 8, repeat: -1 },
+    { key: ANIMS.maeHavaianasReadying, start: 9, end: 13, frameRate: 12, repeat: 0 },
+    { key: ANIMS.maeHavaianasThrowing, start: 24, end: 27, frameRate: 14, repeat: 0 },
+    { key: ANIMS.maeHavaianasRecovering, start: 30, end: 31, frameRate: 10, repeat: 0 },
+  ],
+  visualScale: {
+    displayWidthRadiusMultiplier: 3.1,
+    preserveFrameAspectRatio: true,
+    origin: { x: 0.5, y: 0.5 },
+  },
+} as const;
+
 export function resolveSpriteSheetSpec(
   spec: SpriteSheetSpec,
   imageWidth: number,

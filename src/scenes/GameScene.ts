@@ -4,7 +4,7 @@ import { GameEvents, emitGameEvent } from '../core/EventBus';
 import { PLAY_WIDTH, GAME_HEIGHT, LEAK_DAMAGE } from '../core/constants';
 import { ACTIVE_MAP } from '../data/maps';
 import { ENEMY_TYPES } from '../data/enemies';
-import type { TowerType } from '../data/towers';
+import type { ProjectileVisualSpec, TowerType } from '../data/towers';
 import { Enemy } from '../entities/Enemy';
 import { Tower } from '../entities/Tower';
 import { Projectile } from '../entities/Projectile';
@@ -114,8 +114,9 @@ export class GameScene extends Phaser.Scene {
     target: Enemy,
     damage: number,
     speed: number,
+    visual?: ProjectileVisualSpec,
   ): void => {
-    const p = new Projectile(this, x, y, target, damage, speed).setDepth(
+    const p = new Projectile(this, x, y, target, damage, speed, visual).setDepth(
       DEPTH.projectile,
     ) as Projectile;
     this.projectiles.push(p);

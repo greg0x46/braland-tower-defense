@@ -1,7 +1,7 @@
-import type { AttackAnimationStageKind } from '../data/towers';
+import type { VisualAnimationPlayback } from './visualStateMachine';
 
 export function animationFrameIndexAt(
-  kind: AttackAnimationStageKind,
+  kind: VisualAnimationPlayback,
   frameCount: number,
   frameDurationMs: number,
   phaseElapsedSec: number,

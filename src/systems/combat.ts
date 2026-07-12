@@ -1,4 +1,4 @@
-import { pickMostAdvancedInRange } from './targeting';
+import { pickHighestCurrentHealthInRange, pickMostAdvancedInRange } from './targeting';
 import type { AttackArea, AttackBehavior, AttackTarget } from '../data/towers';
 
 /**
@@ -53,7 +53,12 @@ export function acquireTarget<T extends AttackTarget>(
   base: Origin,
   candidates: readonly T[],
 ): T | null {
-  return pickMostAdvancedInRange(base.x, base.y, behavior.range, candidates);
+  switch (behavior.targetRule) {
+    case 'most-advanced-in-range':
+      return pickMostAdvancedInRange(base.x, base.y, behavior.range, candidates);
+    case 'highest-current-health-in-range':
+      return pickHighestCurrentHealthInRange(base.x, base.y, behavior.range, candidates);
+  }
 }
 
 /** Alvos dentro da área, do mais avançado para o menos, respeitando `maxTargets`. */

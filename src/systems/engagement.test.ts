@@ -22,6 +22,7 @@ interface TestTarget {
   y: number;
   alive: boolean;
   distanceTravelled: number;
+  currentHp: number;
 }
 
 const BASE = { x: 0, y: 0 };
@@ -32,7 +33,7 @@ function target(
   distanceTravelled: number,
   alive = true,
 ): TestTarget {
-  return { id, x, y: 0, alive, distanceTravelled };
+  return { id, x, y: 0, alive, distanceTravelled, currentHp: 10 };
 }
 
 function behavior(profile: EngagementProfile, overrides: Partial<AttackBehavior> = {}): AttackBehavior {
@@ -114,7 +115,7 @@ describe('engagement structural invariants', () => {
     stepEngagement(cfg, state, [first], 0.01);
 
     expect(() => stepEngagement(cfg, state, [], 0.05)).not.toThrow();
-    expect(['lying_idle', 'lying_down', 'returning']).toContain(state.phase.kind);
+    expect(['idle', 'recovering', 'returning']).toContain(state.phase.kind);
   });
 
   it('starts lying down and remains there without a valid target', () => {
@@ -123,29 +124,29 @@ describe('engagement structural invariants', () => {
 
     stepEngagement(cfg, state, [], 0.5);
 
-    expect(state.phase.kind).toBe('lying_idle');
+    expect(state.phase.kind).toBe('idle');
     expectAtBase(state);
   });
 });
 
 describe('pursuer engagement', () => {
-  it('completes standing_up before chasing or biting', () => {
+  it('completes windup before moving or attacking', () => {
     const cfg = config('pursuer', { standUpSec: 0.12, pursuitSpeedPxPerSec: 100 });
     const state = createEngagementState<TestTarget>(BASE);
     const enemy = target('enemy', 80, 100);
 
     expect(stepEngagement(cfg, state, [enemy], 0.01)).toEqual([]);
-    expect(state.phase.kind).toBe('standing_up');
+    expect(state.phase.kind).toBe('windup');
     expectAtBase(state);
 
     stepEngagement(cfg, state, [enemy], 0.1);
 
-    expect(state.phase.kind).toBe('standing_up');
+    expect(state.phase.kind).toBe('windup');
     expectAtBase(state);
 
     stepEngagement(cfg, state, [enemy], 0.02);
 
-    expect(state.phase.kind).toBe('chasing');
+    expect(state.phase.kind).toBe('moving');
     expect(distanceFromBase(state)).toBeGreaterThan(0);
   });
 
@@ -160,13 +161,13 @@ describe('pursuer engagement', () => {
     const enemy = target('enemy', 1, 100);
 
     expect(stepEngagement(cfg, state, [enemy], 0.063)).toEqual([]);
-    expect(state.phase.kind).toBe('biting');
+    expect(state.phase.kind).toBe('attacking');
     expect(state.strikeEmitted).toBe(false);
 
     const commands = stepEngagement(cfg, state, [enemy], 0.001);
 
     expect(commands).toEqual([{ kind: 'strike', target: enemy, damage: cfg.behavior.damage }]);
-    expect(state.phase.kind).toBe('biting');
+    expect(state.phase.kind).toBe('attacking');
     expect(state.strikeEmitted).toBe(true);
     expect(stepEngagement(cfg, state, [enemy], 0.01)).toEqual([]);
   });
@@ -180,14 +181,14 @@ describe('pursuer engagement', () => {
     const commands = stepEngagement(cfg, state, [first, second], 0.1);
 
     expect(commands).toEqual([{ kind: 'strike', target: first, damage: cfg.behavior.damage }]);
-    expect(state.phase.kind).toBe('biting');
+    expect(state.phase.kind).toBe('attacking');
     expect(distanceFromBase(state)).toBeGreaterThan(0);
 
     first.alive = false;
     stepEngagement(cfg, state, [first, second], 0.11);
 
-    expect(state.phase.kind).toBe('chasing');
-    if (state.phase.kind !== 'chasing') throw new Error('esperado chasing');
+    expect(state.phase.kind).toBe('moving');
+    if (state.phase.kind !== 'moving') throw new Error('esperado moving');
     expect(state.phase.target).toBe(second);
     expect(distanceFromBase(state)).toBeGreaterThan(0);
   });
@@ -203,8 +204,8 @@ describe('pursuer engagement', () => {
     const commands = stepEngagement(cfg, state, [first, second], 0.1);
 
     expect(commands).toEqual([]);
-    expect(state.phase.kind).toBe('chasing');
-    if (state.phase.kind !== 'chasing') throw new Error('esperado chasing');
+    expect(state.phase.kind).toBe('moving');
+    if (state.phase.kind !== 'moving') throw new Error('esperado moving');
     expect(state.phase.target).toBe(second);
   });
 
@@ -252,11 +253,11 @@ describe('returning engagement', () => {
     expect(state.phase.kind).toBe('returning');
 
     stepEngagement(cfg, state, [enemy], 0.05);
-    expect(state.phase.kind).toBe('lying_down');
+    expect(state.phase.kind).toBe('recovering');
     expectAtBase(state);
 
     stepEngagement(cfg, state, [enemy], 0.18);
-    expect(state.phase.kind).toBe('lying_idle');
+    expect(state.phase.kind).toBe('idle');
     expectAtBase(state);
   });
 
@@ -269,11 +270,11 @@ describe('returning engagement', () => {
 
     stepEngagement(cfg, state, [enemy], 0);
 
-    expect(state.phase.kind).toBe('chasing');
+    expect(state.phase.kind).toBe('moving');
     expect(state.x).toBeCloseTo(100, 6);
   });
 
-  it('gets from the leash edge back to lying_idle within two seconds', () => {
+  it('gets from the leash edge back to idle within two seconds', () => {
     const cfg = config('pursuer', { pursuitSpeedPxPerSec: 520 });
     const state = createEngagementState<TestTarget>(BASE);
     state.phase = { kind: 'returning' };
@@ -281,13 +282,13 @@ describe('returning engagement', () => {
 
     stepEngagement(cfg, state, [], 2);
 
-    expect(state.phase.kind).toBe('lying_idle');
+    expect(state.phase.kind).toBe('idle');
     expectAtBase(state);
   });
 });
 
 describe('stationary engagement', () => {
-  it('attacks from base without ever entering chasing or returning', () => {
+  it('attacks from base without ever entering moving or returning', () => {
     const cfg = config('stationary');
     const state = createEngagementState<TestTarget>(BASE);
     const enemy = target('enemy', 50, 100);
@@ -298,7 +299,7 @@ describe('stationary engagement', () => {
     phases.push(state.phase.kind);
 
     expectAtBase(state);
-    expect(phases).not.toContain('chasing');
+    expect(phases).not.toContain('moving');
     expect(phases).not.toContain('returning');
     expect(strikeTimes.length).toBeGreaterThanOrEqual(2);
     for (let i = 1; i < strikeTimes.length; i++) {

@@ -63,6 +63,7 @@ export const TEXTURES = {
   towerCarameloAttack: 'tower-vira-lata-caramelo-attack',
   towerCarameloAttackAlt: 'tower-vira-lata-caramelo-attack-alt',
   towerCarameloSheet: 'tower-vira-lata-caramelo-sheet',
+  towerMaeHavaianasSheet: 'tower-mae-de-havaianas-sheet',
   enemyMotoboy: 'enemy-dois-caras-moto',
 } as const;
 
@@ -78,6 +79,10 @@ export const ANIMS = {
   carameloChasing: 'caramelo-chasing',
   carameloBiting: 'caramelo-biting',
   carameloLyingDown: 'caramelo-lying-down',
+  maeHavaianasIdle: 'mae-de-havaianas-idle',
+  maeHavaianasReadying: 'mae-de-havaianas-readying',
+  maeHavaianasThrowing: 'mae-de-havaianas-throwing',
+  maeHavaianasRecovering: 'mae-de-havaianas-recovering',
 } as const;
 
 /**
@@ -106,6 +111,7 @@ export const COLORS = {
   path: 0x8d6e63, // marrom asfalto/terra
   pathBorder: 0x5d4037,
   towerCaramelo: 0xd9a066, // caramelo
+  towerMaeHavaianas: 0xe85d75, // rosa/vermelho da havaiana
   enemyMoto: 0xef5350, // vermelho
   projectile: 0xfff176, // amarelo
   rangeValid: 0x66bb6a,

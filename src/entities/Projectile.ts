@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { COLORS } from '../core/constants';
+import type { ProjectileVisualSpec } from '../data/towers';
 import type { Enemy } from './Enemy';
 
 /**
@@ -7,12 +8,16 @@ import type { Enemy } from './Enemy';
  * direção a ele; ao encostar, aplica dano. Se o alvo morrer/vazar antes,
  * segue até a última posição conhecida e expira.
  */
-export class Projectile extends Phaser.GameObjects.Arc {
+export class Projectile extends Phaser.GameObjects.Container {
   private readonly speed: number;
   private readonly damage: number;
+  private readonly spinRadPerSec: number;
+  private readonly rotationOffsetRad: number;
+  private readonly visual: Phaser.GameObjects.Image | Phaser.GameObjects.Arc;
   private target: Enemy | null;
   private lastX: number;
   private lastY: number;
+  private spinRotation = 0;
   private life = 2; // segundos até expirar por segurança
 
   constructor(
@@ -22,14 +27,19 @@ export class Projectile extends Phaser.GameObjects.Arc {
     target: Enemy,
     damage: number,
     speed: number,
+    visualSpec?: ProjectileVisualSpec,
   ) {
-    super(scene, x, y, 5, 0, 360, false, COLORS.projectile);
-    this.setStrokeStyle(1, 0x000000, 0.4);
+    super(scene, x, y);
     this.speed = speed;
     this.damage = damage;
+    this.spinRadPerSec = visualSpec?.spinRadPerSec ?? 0;
+    this.rotationOffsetRad = visualSpec?.rotationOffsetRad ?? 0;
     this.target = target;
     this.lastX = target.x;
     this.lastY = target.y;
+    this.visual = this.buildVisual(scene, visualSpec);
+    this.add(this.visual);
+    this.updateVisualRotation(this.lastX - x, this.lastY - y, 0);
     scene.add.existing(this);
   }
 
@@ -50,6 +60,8 @@ export class Projectile extends Phaser.GameObjects.Arc {
     const dist = Math.hypot(dx, dy);
     const move = this.speed * deltaSec;
 
+    this.updateVisualRotation(dx, dy, deltaSec);
+
     if (dist <= move) {
       this.setPosition(this.lastX, this.lastY);
       if (this.target && this.target.status === 'alive') {
@@ -61,5 +73,34 @@ export class Projectile extends Phaser.GameObjects.Arc {
     const t = move / dist;
     this.setPosition(this.x + dx * t, this.y + dy * t);
     return false;
+  }
+
+  private buildVisual(
+    scene: Phaser.Scene,
+    visualSpec?: ProjectileVisualSpec,
+  ): Phaser.GameObjects.Image | Phaser.GameObjects.Arc {
+    if (visualSpec && scene.textures.exists(visualSpec.frame.textureKey)) {
+      const image = scene.add
+        .image(0, 0, visualSpec.frame.textureKey, visualSpec.frame.frame)
+        .setOrigin(0.5);
+      const aspect = image.frame.realHeight / image.frame.realWidth;
+      image.setDisplaySize(visualSpec.displayWidth, visualSpec.displayWidth * aspect);
+      return image;
+    }
+
+    const fallback = scene.add.circle(0, 0, 5, COLORS.projectile);
+    fallback.setStrokeStyle(1, 0x000000, 0.4);
+    return fallback;
+  }
+
+  private updateVisualRotation(dx: number, dy: number, deltaSec: number): void {
+    this.spinRotation += this.spinRadPerSec * deltaSec;
+    if (Math.abs(dx) <= 0.000001 && Math.abs(dy) <= 0.000001) {
+      this.visual.rotation = this.rotationOffsetRad + this.spinRotation;
+      return;
+    }
+
+    this.visual.rotation =
+      Math.atan2(dy, dx) + this.rotationOffsetRad + this.spinRotation;
   }
 }

@@ -1,6 +1,7 @@
 import { COLORS, ENGAGEMENT_FALLBACK, TEXTURES } from '../core/constants';
-import type { EngagementTimings } from '../systems/engagement';
+import type { EngagementPhaseKind, EngagementTimings } from '../systems/engagement';
 import type { Targetable } from '../systems/targeting';
+import type { VisualAnimationPlayback } from '../systems/visualStateMachine';
 
 /* --- Contrato de ataque (gameplay) ------------------------------------------
  *
@@ -11,7 +12,7 @@ import type { Targetable } from '../systems/targeting';
 
 export type AttackKind = 'projectile' | 'direct' | 'area';
 
-export type TargetRule = 'most-advanced-in-range';
+export type TargetRule = 'most-advanced-in-range' | 'highest-current-health-in-range';
 
 /**
  * Quando o efeito é aplicado:
@@ -68,22 +69,22 @@ export interface SpriteFrameRef {
   label?: string;
 }
 
-export type AttackAnimationStageName =
-  | 'lying_idle'
-  | 'standing_up'
-  | 'chasing'
-  | 'biting'
-  | 'returning'
-  | 'lying_down';
+export interface ProjectileVisualSpec {
+  frame: SpriteFrameRef;
+  displayWidth: number;
+  rotationOffsetRad?: number;
+  spinRadPerSec?: number;
+}
 
-export type AttackAnimationStageKind = 'once' | 'loop';
+export type VisualAnimationStageName = string;
 
 export interface AttackAnimationStage {
-  name: AttackAnimationStageName;
-  kind: AttackAnimationStageKind;
+  name: VisualAnimationStageName;
+  kind: VisualAnimationPlayback;
   frames: SpriteFrameRef[];
   frameDurationMs: number;
-  fireCueFrameIndex?: number;
+  cueFrameIndex?: number;
+  cueName?: string;
   minDurationMs?: number;
 }
 
@@ -93,6 +94,7 @@ export interface AttackAnimationDefinition {
   visualSpeedPxPerSec: number;
   arrivalDistancePx: number;
   idleFrame?: SpriteFrameRef;
+  stateMap: Partial<Record<EngagementPhaseKind, VisualAnimationStageName>>;
   stages: AttackAnimationStage[];
   fallbackSpriteKey?: string;
 }
@@ -123,6 +125,8 @@ export interface TowerType {
   spriteFrame?: SpriteFrameRef;
   /** Sequência visual opcional para ataques; não altera regras de gameplay. */
   attackAnimation?: AttackAnimationDefinition;
+  /** Apresentação opcional do projétil; sem textura, o projétil usa fallback. */
+  projectileVisual?: ProjectileVisualSpec;
 }
 
 /**
@@ -150,39 +154,59 @@ export function engagementTimingsOf(type: TowerType): EngagementTimings {
   const animation = type.attackAnimation;
   if (!animation) return ENGAGEMENT_FALLBACK;
 
-  const standingUp = animation.stages.find((stage) => stage.name === 'standing_up');
-  const biting = animation.stages.find((stage) => stage.name === 'biting');
-  const lyingDown = animation.stages.find((stage) => stage.name === 'lying_down');
-  const strikeSec = stageDurationSec(biting);
+  const windup = animationStageFor(animation, 'windup');
+  const attacking = animationStageFor(animation, 'attacking');
+  const recovering = animationStageFor(animation, 'recovering');
+  const strikeSec = stageDurationSec(attacking);
   const cueAtSec =
-    biting?.fireCueFrameIndex === undefined
+    attacking?.cueFrameIndex === undefined
       ? 0
       : Math.min(
           strikeSec,
-          (biting.fireCueFrameIndex * Math.max(1, biting.frameDurationMs)) / 1000,
+          (attacking.cueFrameIndex * Math.max(1, attacking.frameDurationMs)) / 1000,
         );
 
   return {
-    standUpSec: stageDurationSec(standingUp),
+    standUpSec: stageDurationSec(windup),
     strikeSec,
     cueAtSec,
-    lieDownSec: stageDurationSec(lyingDown),
+    lieDownSec: stageDurationSec(recovering),
     pursuitSpeedPxPerSec: animation.visualSpeedPxPerSec,
     arrivalDistancePx: animation.arrivalDistancePx,
   };
 }
 
-function sheetFrames(start: number, end: number, labelPrefix: string): SpriteFrameRef[] {
+function animationStageFor(
+  animation: AttackAnimationDefinition,
+  state: EngagementPhaseKind,
+): AttackAnimationStage | undefined {
+  const stageName = animation.stateMap[state];
+  return stageName === undefined
+    ? undefined
+    : animation.stages.find((stage) => stage.name === stageName);
+}
+
+function sheetFrames(
+  textureKey: string,
+  start: number,
+  end: number,
+  labelPrefix: string,
+): SpriteFrameRef[] {
   return Array.from({ length: end - start + 1 }, (_, offset) => ({
-    textureKey: TEXTURES.towerCarameloSheet,
+    textureKey,
     frame: start + offset,
     label: `${labelPrefix} ${offset + 1}`,
   }));
 }
 
-function sheetFramesReverse(start: number, end: number, labelPrefix: string): SpriteFrameRef[] {
+function sheetFramesReverse(
+  textureKey: string,
+  start: number,
+  end: number,
+  labelPrefix: string,
+): SpriteFrameRef[] {
   return Array.from({ length: start - end + 1 }, (_, offset) => ({
-    textureKey: TEXTURES.towerCarameloSheet,
+    textureKey,
     frame: start - offset,
     label: `${labelPrefix} ${offset + 1}`,
   }));
@@ -225,47 +249,139 @@ export const TOWER_TYPES: Record<string, TowerType> = {
         label: 'deitado',
       },
       fallbackSpriteKey: TEXTURES.towerCaramelo,
+      stateMap: {
+        idle: 'lying_idle',
+        windup: 'standing_up',
+        moving: 'chasing',
+        attacking: 'biting',
+        returning: 'returning',
+        recovering: 'lying_down',
+      },
       stages: [
         {
           name: 'lying_idle',
           kind: 'loop',
           frameDurationMs: 360,
-          frames: sheetFrames(8, 9, 'deitado'),
+          frames: sheetFrames(TEXTURES.towerCarameloSheet, 8, 9, 'deitado'),
         },
         {
           name: 'standing_up',
           kind: 'once',
           frameDurationMs: 60,
           minDurationMs: 120,
-          frames: sheetFrames(10, 15, 'levantando'),
+          frames: sheetFrames(TEXTURES.towerCarameloSheet, 10, 15, 'levantando'),
         },
         {
           name: 'chasing',
           kind: 'loop',
           frameDurationMs: 80,
           minDurationMs: 80,
-          frames: sheetFrames(16, 23, 'corrida'),
+          frames: sheetFrames(TEXTURES.towerCarameloSheet, 16, 23, 'corrida'),
         },
         {
           name: 'biting',
           kind: 'once',
           frameDurationMs: 32,
-          fireCueFrameIndex: 2,
-          frames: sheetFrames(25, 29, 'mordida'),
+          cueFrameIndex: 2,
+          cueName: 'impact',
+          frames: sheetFrames(TEXTURES.towerCarameloSheet, 25, 29, 'mordida'),
         },
         {
           name: 'returning',
           kind: 'loop',
           frameDurationMs: 80,
           minDurationMs: 80,
-          frames: sheetFrames(16, 23, 'retorno'),
+          frames: sheetFrames(TEXTURES.towerCarameloSheet, 16, 23, 'retorno'),
         },
         {
           name: 'lying_down',
           kind: 'once',
           frameDurationMs: 45,
           minDurationMs: 180,
-          frames: sheetFramesReverse(15, 8, 'deitando'),
+          frames: sheetFramesReverse(TEXTURES.towerCarameloSheet, 15, 8, 'deitando'),
+        },
+      ],
+    },
+  },
+  'mae-de-havaianas': {
+    id: 'mae-de-havaianas',
+    name: 'Mãe de Havaianas',
+    emoji: '🩴',
+    color: COLORS.towerMaeHavaianas,
+    cost: 140,
+    range: 420,
+    damage: 18,
+    fireRate: 0.55,
+    radius: 22,
+    attack: {
+      id: 'mae-de-havaianas-slipper-shot',
+      kind: 'projectile',
+      targetRule: 'highest-current-health-in-range',
+      visualCuePolicy: 'onCue',
+      engagement: 'stationary',
+      projectileSpeed: 620,
+    },
+    spriteKey: TEXTURES.towerMaeHavaianasSheet,
+    spriteFrame: {
+      textureKey: TEXTURES.towerMaeHavaianasSheet,
+      frame: 0,
+      label: 'alerta',
+    },
+    projectileVisual: {
+      frame: {
+        textureKey: TEXTURES.towerMaeHavaianasSheet,
+        frame: 28,
+        label: 'chinelo',
+      },
+      displayWidth: 34,
+      rotationOffsetRad: Math.PI / 2,
+      spinRadPerSec: Math.PI * 9,
+    },
+    attackAnimation: {
+      id: 'mae-de-havaianas-attack',
+      visualScale: 3.1,
+      visualSpeedPxPerSec: ENGAGEMENT_FALLBACK.pursuitSpeedPxPerSec,
+      arrivalDistancePx: ENGAGEMENT_FALLBACK.arrivalDistancePx,
+      idleFrame: {
+        textureKey: TEXTURES.towerMaeHavaianasSheet,
+        frame: 0,
+        label: 'alerta',
+      },
+      fallbackSpriteKey: TEXTURES.towerMaeHavaianasSheet,
+      stateMap: {
+        idle: 'idle',
+        windup: 'readying',
+        attacking: 'throwing',
+        recovering: 'recovering',
+      },
+      stages: [
+        {
+          name: 'idle',
+          kind: 'loop',
+          frameDurationMs: 260,
+          frames: sheetFrames(TEXTURES.towerMaeHavaianasSheet, 0, 7, 'alerta'),
+        },
+        {
+          name: 'readying',
+          kind: 'once',
+          frameDurationMs: 70,
+          minDurationMs: 180,
+          frames: sheetFrames(TEXTURES.towerMaeHavaianasSheet, 9, 13, 'preparando chinelo'),
+        },
+        {
+          name: 'throwing',
+          kind: 'once',
+          frameDurationMs: 58,
+          cueFrameIndex: 3,
+          cueName: 'impact',
+          frames: sheetFrames(TEXTURES.towerMaeHavaianasSheet, 24, 27, 'arremesso'),
+        },
+        {
+          name: 'recovering',
+          kind: 'once',
+          frameDurationMs: 80,
+          minDurationMs: 180,
+          frames: sheetFrames(TEXTURES.towerMaeHavaianasSheet, 30, 31, 'recuperando'),
         },
       ],
     },
