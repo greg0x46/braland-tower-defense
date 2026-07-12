@@ -7,6 +7,7 @@ import {
   type GameEventPayloads,
 } from '../core/EventBus';
 import { GameState } from '../core/GameState';
+import { AudioSettings } from '../core/AudioSettings';
 import {
   GAME_WIDTH,
   GAME_HEIGHT,
@@ -25,6 +26,11 @@ import {
   scrollToCard,
   type RosterLayout,
 } from '../systems/rosterLayout';
+import {
+  AUDIO_HUD_LAYOUT,
+  handleXFromVolume,
+  volumeFromPointerX,
+} from '../systems/volumeSlider';
 
 /** Layout da sidebar de torres (à direita do campo de jogo). */
 const SIDEBAR_CX = PLAY_WIDTH + SIDEBAR_WIDTH / 2;
@@ -60,6 +66,11 @@ export class UIScene extends Phaser.Scene {
   private livesText!: Phaser.GameObjects.Text;
   private waveText!: Phaser.GameObjects.Text;
   private pauseButton!: Button;
+
+  /** Controles de áudio (barra superior, à direita). */
+  private muteIcon!: Phaser.GameObjects.Text;
+  private volumeHandle!: Phaser.GameObjects.Rectangle;
+  private volumeFill!: Phaser.GameObjects.Rectangle;
 
   private cards: TowerCard[] = [];
   private selectedTypeId: string | null = null;
@@ -99,6 +110,108 @@ export class UIScene extends Phaser.Scene {
     this.moneyText = this.stat(24, `💰 ${GameState.money}`);
     this.livesText = this.stat(230, `❤️ ${GameState.lives}`);
     this.waveText = this.stat(420, this.waveLabel(GameState.wave));
+
+    this.buildAudioControls();
+  }
+
+  /**
+   * Mudo + volume, ancorados à direita da barra superior (decisão D8). Esta cena
+   * só **desenha** e **chama**: a coerência entre mudo e volume vive nas regras
+   * puras (`systems/audioSettings`), e a matemática do trilho em
+   * `systems/volumeSlider`. Aqui não se decide nada — por isso é tão pouco código.
+   */
+  private buildAudioControls(): void {
+    const { muteButton, slider } = AUDIO_HUD_LAYOUT;
+
+    this.muteIcon = this.add
+      .text(muteButton.centerX, muteButton.centerY, this.muteLabel(AudioSettings.muted), {
+        fontSize: '24px',
+      })
+      .setOrigin(0.5)
+      .setDepth(2)
+      .setInteractive({ useHandCursor: true });
+
+    this.muteIcon.on('pointerdown', () => {
+      this.pressIcon(this.muteIcon);
+      AudioSettings.toggleMute();
+    });
+
+    // Trilho: o fundo inteiro + o preenchimento até a alça (leitura imediata do nível).
+    this.add
+      .rectangle(
+        slider.trackX,
+        slider.centerY,
+        slider.trackWidth,
+        slider.trackHeight,
+        COLORS.cardBorder,
+      )
+      .setOrigin(0, 0.5)
+      .setDepth(1);
+
+    this.volumeFill = this.add
+      .rectangle(slider.trackX, slider.centerY, 0, slider.trackHeight, COLORS.cardSelected)
+      .setOrigin(0, 0.5)
+      .setDepth(2);
+
+    this.volumeHandle = this.add
+      .rectangle(
+        handleXFromVolume(AudioSettings.volume),
+        slider.centerY,
+        slider.handleWidth,
+        slider.handleHeight,
+        COLORS.hudText,
+      )
+      .setOrigin(0.5)
+      .setDepth(3);
+
+    // A zona de arraste é o trilho inteiro (mais alta que ele, para o ponteiro não
+    // precisar de pontaria): clicar em qualquer ponto salta o volume para lá.
+    const dragZone = this.add
+      .rectangle(
+        slider.trackX,
+        slider.centerY,
+        slider.trackWidth,
+        slider.handleHeight + 8,
+        0x000000,
+        0,
+      )
+      .setOrigin(0, 0.5)
+      .setDepth(4)
+      .setInteractive({ useHandCursor: true, draggable: true });
+
+    const applyPointer = (pointer: Phaser.Input.Pointer): void => {
+      AudioSettings.setVolume(volumeFromPointerX(pointer.x));
+    };
+    dragZone.on('pointerdown', applyPointer);
+    dragZone.on('drag', applyPointer);
+
+    this.refreshAudioControls(AudioSettings.muted, AudioSettings.volume);
+  }
+
+  /** "Volume no mínimo" e "mudo" são o mesmo estado audível — o ícone nunca mente (P3). */
+  private muteLabel(muted: boolean): string {
+    return muted ? '🔇' : '🔊';
+  }
+
+  private refreshAudioControls(muted: boolean, volume: number): void {
+    const { slider } = AUDIO_HUD_LAYOUT;
+    const handleX = handleXFromVolume(volume);
+
+    this.muteIcon.setText(this.muteLabel(muted));
+    this.muteIcon.setAlpha(muted ? 0.6 : 1);
+
+    // A alça mostra o volume guardado mesmo no mudo (é para lá que o som volta);
+    // o preenchimento apaga, porque ele representa o que se ouve de fato.
+    this.volumeHandle.setX(handleX);
+    this.volumeHandle.setAlpha(muted ? 0.5 : 1);
+    this.volumeFill.setSize(muted ? 0 : handleX - slider.trackX, slider.trackHeight);
+  }
+
+  /** Mesmo "afunda e volta" dos botões, para um alvo que não é um Container. */
+  private pressIcon(target: Phaser.GameObjects.Text): void {
+    this.tweens.killTweensOf(target);
+    target.setScale(0.88);
+    this.tweens.add({ targets: target, scale: 1, duration: 120, ease: 'Back.Out' });
   }
 
   private stat(x: number, value: string): Phaser.GameObjects.Text {
@@ -409,6 +522,7 @@ export class UIScene extends Phaser.Scene {
     onGameEvent(GameEvents.PAUSE_STATE_CHANGED, this.onPauseChanged, this);
     onGameEvent(GameEvents.SELECT_TOWER, this.onSelectSync, this);
     onGameEvent(GameEvents.MATCH_DEFEATED, this.onMatchDefeated, this);
+    onGameEvent(GameEvents.AUDIO_SETTINGS_CHANGED, this.onAudioSettingsChanged, this);
   }
 
   private onMoney = ({ money }: GameEventPayloads['money-changed']): void => {
@@ -448,6 +562,18 @@ export class UIScene extends Phaser.Scene {
 
   private onMatchDefeated = (): void => {
     this.showEndScreen('DERROTA', 'Sua cidade foi tomada!', 0xc62828);
+  };
+
+  /**
+   * O HUD é espelho, não fonte: reflete o estado que `AudioSettings` decidiu.
+   * Por isso o ícone e a alça continuam coerentes mesmo quando a mudança não veio
+   * de um clique daqui (ex.: a preferência carregada do storage no boot).
+   */
+  private onAudioSettingsChanged = ({
+    muted,
+    volume,
+  }: GameEventPayloads['audio-settings-changed']): void => {
+    this.refreshAudioControls(muted, volume);
   };
 
   private showEndScreen(title: string, subtitle: string, color: number): void {
@@ -510,6 +636,7 @@ export class UIScene extends Phaser.Scene {
     offGameEvent(GameEvents.PAUSE_STATE_CHANGED, this.onPauseChanged, this);
     offGameEvent(GameEvents.SELECT_TOWER, this.onSelectSync, this);
     offGameEvent(GameEvents.MATCH_DEFEATED, this.onMatchDefeated, this);
+    offGameEvent(GameEvents.AUDIO_SETTINGS_CHANGED, this.onAudioSettingsChanged, this);
     this.input.off(Phaser.Input.Events.POINTER_WHEEL, this.onWheel, this);
     this.input.setDefaultCursor('default');
   }

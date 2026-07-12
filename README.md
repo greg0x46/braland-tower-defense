@@ -115,11 +115,18 @@ o jogo *e* trava a construção. Derrota é a única condição de fim, e só o
 **Jogar novamente** sai dela. Detalhes em
 [`src/systems/matchProgression.ts`](src/systems/matchProgression.ts).
 
+**Áudio**: a trilha toca em loop assim que você interage com a página (navegadores
+bloqueiam autoplay até o primeiro gesto — isso é espera normal, não erro). Os
+controles ficam à direita da barra superior: **🔊/🔇** silencia em um clique e o
+slider ajusta o volume. A escolha é lembrada entre sessões. A pausa da partida
+**não** afeta a música — só a sua preferência afeta.
+
 ## Escopo desta fatia
 
 Incluído: 1 mapa, 1 inimigo (🛵 Dois Caras numa Moto), 1 torre (🐕 Vira-lata
 Caramelo), caminho + movimento, ondas infinitas com dificuldade progressiva,
-construção livre, dano, dinheiro, vida, pausa e derrota.
+construção livre, dano, dinheiro, vida, pausa, derrota e trilha sonora com
+controle de mudo/volume.
 
 Fora (próximas rodadas): Motoboy, Faria Limer, Político, Ônibus Lotado, Carreta
 Furacão (chefe), upgrades, backend.
@@ -133,15 +140,21 @@ src/
     constants.ts       Dimensões, cores, valores iniciais
     EventBus.ts        Catálogo de eventos (produtor/consumidor/payload) + emissão tipada
     GameState.ts       Dinheiro, vida, onda e estado da partida (emite eventos)
+    AudioSettings.ts   Preferência de mudo/volume (vive fora da partida: sobrevive ao reset)
+    preferenceStorage.ts  localStorage atrás de try/catch (Safari privado LANÇA)
   data/                Config data-driven (adicionar conteúdo = nova entrada)
     contracts.ts       Valores de gameplay ACEITOS (o portão falha se derivarem)
     maps.ts            Contrato de mapa: visual, caminho, construção e debug
+    audio.ts           Catálogo de faixas (trocar a música = trocar uma entrada)
     enemies.ts  towers.ts  waves.ts  path.ts
   systems/             Regras puras sem Phaser (testáveis via Vitest)
     matchProgression.ts Máquina de estados da partida (endless, derrota-só)
     combat.ts          Resolve o ataque pelo comportamento, não pelo sprite
     mapContract.ts     Valida o contrato de mapa (caminho, estrada, limites)
     rosterLayout.ts    Quantos cards cabem, rolagem, alcançabilidade
+    audioSettings.ts   Coerência mudo↔volume (volume no mínimo É mudo)
+    audioPreferencesCodec.ts  Parse tolerante da preferência salva (nunca lança)
+    volumeSlider.ts    Geometria do slider (pixel ↔ volume, com clamp)
     geometry.ts        Distância ponto→segmento / ponto→caminho
     targeting.ts       Seleção do alvo mais avançado no alcance
     placement.ts       Validação de construção (limites/caminho/overlap/$)
@@ -157,10 +170,11 @@ src/
   managers/
     BuildManager.ts    Seleção + preview + validação + compra
     WaveManager.ts     Agenda spawns; encadeia a próxima onda (progressão infinita)
+    MusicManager.ts    Único módulo que fala com o Sound Manager e conhece o .mp3
   scenes/
-    BootScene.ts       Reinicia estado e sobe Game + UI
+    BootScene.ts       Reinicia estado, sobe Game + UI e segura o load da trilha
     GameScene.ts       Mundo, loop principal, listas de entidades
-    UIScene.ts         HUD, menu de torres (rolável), tela de fim
+    UIScene.ts         HUD, menu de torres (rolável), controles de áudio, tela de fim
 ```
 
 **Como estender**: um novo inimigo/torre é uma entrada em `data/enemies.ts` /
@@ -172,3 +186,8 @@ em `data/maps.ts`, e movimento, construção e debug o seguem juntos.
 onda, comportamento de ataque) ficam em `data/contracts.ts`. Se o runtime divergir,
 `npm run check` falha dizendo qual métrica mudou. Mudança intencional de
 balanceamento = atualizar o contrato com `reason`; nunca afrouxar o teste.
+
+## Créditos
+
+**Trilha sonora**: *"Sideways Samba"* — [Audionautix](https://audionautix.com),
+via YouTube Audio Library. Música sem copyright, livre para uso.

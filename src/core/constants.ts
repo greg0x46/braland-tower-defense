@@ -27,6 +27,16 @@ export const WAVE_TIMING = {
 /** Altura da barra de HUD no topo (zona reservada, sem construção). */
 export const HUD_HEIGHT = 64;
 
+/**
+ * Áudio. `defaultVolume` é o fundo audível que deixa espaço para efeitos sonoros
+ * futuros; o catálogo de faixas (`data/audio.ts`) o consome. `storageKey` é onde a
+ * preferência do jogador (mudo/volume) vive no localStorage.
+ */
+export const AUDIO = {
+  defaultVolume: 0.35,
+  storageKey: 'br-td:audio',
+} as const;
+
 /** Chaves das texturas placeholder geradas em BootScene. */
 export const TEXTURES = {
   circle: 'tex-circle',

@@ -28,6 +28,7 @@ export const GameEvents = {
   MATCH_DEFEATED: 'match-defeated',
   MATCH_RESET: 'match-reset',
   WAVE_STATE_CHANGED: 'wave-state-changed',
+  AUDIO_SETTINGS_CHANGED: 'audio-settings-changed',
 } as const;
 
 export type GameEventName = (typeof GameEvents)[keyof typeof GameEvents];
@@ -45,6 +46,12 @@ export interface GameEventPayloads {
   [GameEvents.MATCH_DEFEATED]: { reason: 'lives-depleted' };
   [GameEvents.MATCH_RESET]: void;
   [GameEvents.WAVE_STATE_CHANGED]: { waveActive: boolean };
+  /** `effectiveVolume` é derivado (`muted ? 0 : volume`) — o consumidor não recalcula a regra. */
+  [GameEvents.AUDIO_SETTINGS_CHANGED]: {
+    muted: boolean;
+    volume: number;
+    effectiveVolume: number;
+  };
 }
 
 export type EventStatus = 'active' | 'reserved';
@@ -125,6 +132,18 @@ export const EVENT_CATALOG: Record<GameEventName, EventContract> = {
     reservedFor:
       'Indicador de "onda em andamento" no HUD (ex.: aviso de intervalo entre ondas). ' +
       'O HUD ainda não tem esse indicador; ativar junto com ele.',
+  },
+  [GameEvents.AUDIO_SETTINGS_CHANGED]: {
+    status: 'active',
+    producer: 'AudioSettings (preferência de mudo/volume)',
+    consumers: [
+      'MusicManager (aplica o volume efetivo no som)',
+      'UIScene (ícone de mudo + posição da alça do slider)',
+    ],
+    emissionRules:
+      'Emitido apenas quando a preferência muda de fato (mesma disciplina de PAUSE_STATE_CHANGED). ' +
+      'Arrastar o slider sem mudar o volume resultante não emite. Emitido uma vez no boot, após ' +
+      'carregar a preferência salva, para o HUD nascer sincronizado.',
   },
 };
 
