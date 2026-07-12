@@ -1,12 +1,8 @@
 import Phaser from 'phaser';
 import { GameState } from '../core/GameState';
-import {
-  PLAY_WIDTH,
-  GAME_HEIGHT,
-  COLORS,
-  TEXTURES,
-} from '../core/constants';
-import { PATH } from '../data/path';
+import { GameEvents, emitGameEvent } from '../core/EventBus';
+import { PLAY_WIDTH, GAME_HEIGHT, LEAK_DAMAGE } from '../core/constants';
+import { ACTIVE_MAP } from '../data/maps';
 import { ENEMY_TYPES } from '../data/enemies';
 import type { TowerType } from '../data/towers';
 import { Enemy } from '../entities/Enemy';
@@ -15,6 +11,7 @@ import { Projectile } from '../entities/Projectile';
 import { BuildManager } from '../managers/BuildManager';
 import { WaveManager } from '../managers/WaveManager';
 import { DebugOverlay } from '../debug/DebugOverlay';
+import { describeMapContractErrors, validateMapContract } from '../systems/mapContract';
 
 const DEPTH = { background: 0, enemy: 20, tower: 30, projectile: 40 } as const;
 
@@ -44,6 +41,7 @@ export class GameScene extends Phaser.Scene {
     this.projectiles = [];
     this.cameras.main.roundPixels = true;
 
+    if (import.meta.env.DEV) this.validateMap();
     this.drawMapBackground();
 
     this.buildManager = new BuildManager(this, () => this.towers, this.placeTower);
@@ -60,10 +58,11 @@ export class GameScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.onShutdown, this);
   }
 
+  /** Visual do mapa pelo contrato; a falha do asset cai no fallback jogável (FR-014). */
   private drawMapBackground(): void {
-    if (this.textures.exists(TEXTURES.initialMap)) {
+    if (this.textures.exists(ACTIVE_MAP.visualKey)) {
       this.add
-        .image(0, 0, TEXTURES.initialMap)
+        .image(0, 0, ACTIVE_MAP.visualKey)
         .setOrigin(0)
         .setDisplaySize(PLAY_WIDTH, GAME_HEIGHT)
         .setDepth(DEPTH.background);
@@ -71,15 +70,27 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.add
-      .rectangle(0, 0, PLAY_WIDTH, GAME_HEIGHT, COLORS.background)
+      .rectangle(0, 0, PLAY_WIDTH, GAME_HEIGHT, ACTIVE_MAP.fallbackVisualColor)
       .setOrigin(0)
       .setDepth(DEPTH.background);
 
     if (!this.loggedMapFallback) {
       this.loggedMapFallback = true;
       console.error(
-        `[GameScene] Textura "${TEXTURES.initialMap}" ausente; usando fallback visual do mapa.`,
+        `[GameScene] Textura "${ACTIVE_MAP.visualKey}" do mapa "${ACTIVE_MAP.id}" ausente; usando fallback visual.`,
       );
+    }
+  }
+
+  /**
+   * O contrato do mapa precisa ser válido antes de qualquer entidade nascer: um
+   * caminho fora do campo ou uma estrada de largura zero viram bug de gameplay
+   * silencioso. Em dev, isso aparece no console já no boot (Constitution X).
+   */
+  private validateMap(): void {
+    const errors = validateMapContract(ACTIVE_MAP);
+    if (errors.length > 0) {
+      console.error(describeMapContractErrors(ACTIVE_MAP, errors));
     }
   }
 
@@ -88,7 +99,7 @@ export class GameScene extends Phaser.Scene {
   private spawnEnemy = (enemyTypeId: string, hp: number): void => {
     const type = ENEMY_TYPES[enemyTypeId];
     if (!type) return;
-    const enemy = new Enemy(this, type, PATH, hp).setDepth(DEPTH.enemy) as Enemy;
+    const enemy = new Enemy(this, type, ACTIVE_MAP.path, hp).setDepth(DEPTH.enemy) as Enemy;
     this.enemies.push(enemy);
   };
 
@@ -114,9 +125,9 @@ export class GameScene extends Phaser.Scene {
 
   update(_time: number, delta: number): void {
     this.debug?.update();
-    // Congela tudo quando encerrado ou pausado (US3): entidades, torres,
-    // projéteis e o relógio de ondas param de avançar.
-    if (GameState.isOver || GameState.isPaused) return;
+    // Só o estado `running` avança gameplay: no setup, na pausa e na derrota,
+    // entidades, torres, projéteis e o relógio de ondas ficam congelados (FR-005).
+    if (!GameState.advancesGameplay) return;
     const dt = delta / 1000;
 
     for (const enemy of this.enemies) enemy.step(dt);
@@ -129,15 +140,21 @@ export class GameScene extends Phaser.Scene {
       return true;
     });
 
-    // Resolve inimigos que morreram (recompensa) ou vazaram (dano à base).
+    // Anuncia o que aconteceu; quem decide o custo/recompensa é o GameState.
     this.enemies = this.enemies.filter((enemy) => {
       if (enemy.status === 'dead') {
-        GameState.addMoney(enemy.reward);
+        emitGameEvent(GameEvents.ENEMY_KILLED, {
+          enemyTypeId: enemy.typeId,
+          reward: enemy.reward,
+        });
         enemy.destroy();
         return false;
       }
       if (enemy.status === 'leaked') {
-        GameState.loseLife();
+        emitGameEvent(GameEvents.ENEMY_LEAKED, {
+          enemyTypeId: enemy.typeId,
+          damage: LEAK_DAMAGE,
+        });
         enemy.destroy();
         return false;
       }

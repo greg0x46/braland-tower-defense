@@ -1,4 +1,60 @@
 import { COLORS, TEXTURES } from '../core/constants';
+import type { Targetable } from '../systems/targeting';
+
+/* --- Contrato de ataque (gameplay) ------------------------------------------
+ *
+ * Definido aqui, junto do roster, e resolvido por `systems/combat.ts`. É
+ * deliberadamente independente da animação: trocar, quebrar ou remover um sprite
+ * não muda dano, alcance, cadência nem regra de alvo (FR-006).
+ */
+
+export type AttackKind = 'projectile' | 'direct' | 'area';
+
+export type TargetRule = 'most-advanced-in-range';
+
+/**
+ * Quando o efeito é aplicado:
+ * - `none`: no instante em que o ataque resolve.
+ * - `onCue`: quando a animação sinaliza o golpe — com tempo de fallback se a
+ *   animação não existir (o gameplay nunca depende do asset).
+ * - `onImpact`: quando o projétil atinge o alvo.
+ */
+export type VisualCuePolicy = 'none' | 'onCue' | 'onImpact';
+
+/** Alvo de um ataque. `Enemy` satisfaz estruturalmente. */
+export type AttackTarget = Targetable;
+
+export interface AttackArea {
+  radius: number;
+  /** Teto de alvos atingidos; ausente = sem limite. */
+  maxTargets?: number;
+}
+
+/**
+ * O que a torre declara sobre o ataque. Dano, alcance e cadência não entram
+ * aqui: eles vivem nos stats da torre, para não existirem em dois lugares (a
+ * duplicação seria uma nova fonte de deriva de balanceamento).
+ */
+export interface AttackBehaviorSpec {
+  id: string;
+  kind: AttackKind;
+  targetRule: TargetRule;
+  visualCuePolicy: VisualCuePolicy;
+  /** Obrigatório para `kind: 'projectile'`. */
+  projectileSpeed?: number;
+  /** Obrigatório para `kind: 'area'`. */
+  area?: AttackArea;
+  /** Espaço para efeitos futuros (lentidão, veneno...) sem mudar os contratos atuais. */
+  statusEffects?: readonly string[];
+}
+
+/** Contrato de ataque resolvido: o spec somado aos stats da torre. */
+export interface AttackBehavior extends AttackBehaviorSpec {
+  damage: number;
+  range: number;
+  /** Ataques por segundo. */
+  cadence: number;
+}
 
 export interface SpriteFrameRef {
   textureKey: string;
@@ -37,18 +93,31 @@ export interface TowerType {
   cost: number;
   /** Alcance em pixels. */
   range: number;
-  /** Dano por projétil. */
+  /** Dano por ataque. */
   damage: number;
-  /** Cadência de tiro em disparos por segundo. */
+  /** Cadência em ataques por segundo. */
   fireRate: number;
-  /** Velocidade do projétil em pixels por segundo. */
-  projectileSpeed: number;
   /** Raio do corpo (para desenho e validação de sobreposição). */
   radius: number;
+  /** Como o ataque afeta o alvo. Toda torre referencia exatamente um. */
+  attack: AttackBehaviorSpec;
   /** Chave de textura da apresentação. Ausente ⇒ usa fallback (círculo+emoji). */
   spriteKey?: string;
   /** Sequência visual opcional para ataques; não altera regras de gameplay. */
   attackAnimation?: AttackAnimationDefinition;
+}
+
+/**
+ * Contrato de ataque da torre, com os stats já aplicados. Fonte única: dano,
+ * alcance e cadência vêm dos campos da torre, nunca de uma cópia no spec.
+ */
+export function attackBehaviorOf(type: TowerType): AttackBehavior {
+  return {
+    ...type.attack,
+    damage: type.damage,
+    range: type.range,
+    cadence: type.fireRate,
+  };
 }
 
 export const TOWER_TYPES: Record<string, TowerType> = {
@@ -61,8 +130,15 @@ export const TOWER_TYPES: Record<string, TowerType> = {
     range: 120,
     damage: 5,
     fireRate: 2,
-    projectileSpeed: 420,
     radius: 20,
+    // Corpo-a-corpo: o cachorro corre até o alvo e morde. A mordida sai na deixa
+    // da animação; sem o sprite, sai no tempo de fallback — o dano é o mesmo.
+    attack: {
+      id: 'vira-lata-caramelo-bite',
+      kind: 'direct',
+      targetRule: 'most-advanced-in-range',
+      visualCuePolicy: 'onCue',
+    },
     spriteKey: TEXTURES.towerCaramelo,
     attackAnimation: {
       id: 'vira-lata-caramelo-attack',

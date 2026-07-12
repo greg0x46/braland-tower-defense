@@ -25,7 +25,7 @@ export class Enemy extends Phaser.GameObjects.Container {
   private hp: number;
   private readonly maxHp: number;
   private readonly speed: number;
-  private readonly path: Point[];
+  private readonly path: readonly Point[];
 
   private segmentIndex = 0;
   /** Distância total percorrida — usada para escolher o inimigo mais avançado. */
@@ -43,7 +43,7 @@ export class Enemy extends Phaser.GameObjects.Container {
   /** Orientação atual (histerese entre frames). Entra indo p/ a direita. */
   private orientation: OrientationState = { flipX: true, tilt: 'flat' };
 
-  constructor(scene: Phaser.Scene, type: EnemyType, path: Point[], hpOverride?: number) {
+  constructor(scene: Phaser.Scene, type: EnemyType, path: readonly Point[], hpOverride?: number) {
     const start = path[0];
     super(scene, start.x, start.y);
 
@@ -187,5 +187,9 @@ export class Enemy extends Phaser.GameObjects.Container {
 
   get reward(): number {
     return this.def.reward;
+  }
+
+  get typeId(): string {
+    return this.def.id;
   }
 }

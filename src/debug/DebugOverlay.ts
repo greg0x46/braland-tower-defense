@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
-import { PATH } from '../data/path';
-import { PLAY_WIDTH, GAME_HEIGHT, PATH_WIDTH, HUD_HEIGHT } from '../core/constants';
+import { ACTIVE_MAP } from '../data/maps';
+import { PLAY_WIDTH, GAME_HEIGHT, HUD_HEIGHT } from '../core/constants';
 import { pickMostAdvancedInRange } from '../systems/targeting';
 import type { Enemy } from '../entities/Enemy';
 import type { Tower } from '../entities/Tower';
@@ -61,7 +61,7 @@ export class DebugOverlay {
       .setDepth(DEBUG_DEPTH)
       .setVisible(false);
 
-    this.waypointLabels = PATH.map((point, index) =>
+    this.waypointLabels = ACTIVE_MAP.path.map((point, index) =>
       scene.add
         .text(point.x + 6, point.y + 6, String(index), {
           fontFamily: 'monospace',
@@ -105,7 +105,7 @@ export class DebugOverlay {
 
     if (this.mode === 'path') {
       // Caminho real: faixa de bloqueio + linha central, sempre acima do mapa.
-      this.gfx.lineStyle(PATH_WIDTH, C.pathArea, 0.28);
+      this.gfx.lineStyle(ACTIVE_MAP.roadWidth, C.pathArea, 0.28);
       this.strokePath();
       this.gfx.lineStyle(3, C.path, 0.95);
       this.strokePath();
@@ -152,7 +152,7 @@ export class DebugOverlay {
         `projéteis ${this.sources.projectiles().length}`,
         `mouse     ${pointerX},${pointerY}${pointerInPlayfield ? '' : ' fora'}`,
         `grid      ${GRID_MINOR}/${GRID_MAJOR} labels=${GRID_LABEL_STEP}`,
-        `path w=${PATH_WIDTH}  play=${PLAY_WIDTH}x${GAME_HEIGHT}`,
+        `mapa      ${ACTIVE_MAP.id}  estrada w=${ACTIVE_MAP.roadWidth}  play=${PLAY_WIDTH}x${GAME_HEIGHT}`,
       ].join('\n'),
     );
   }
@@ -205,15 +205,16 @@ export class DebugOverlay {
 
   private strokePath(): void {
     this.gfx.beginPath();
-    this.gfx.moveTo(PATH[0].x, PATH[0].y);
-    for (let i = 1; i < PATH.length; i++) this.gfx.lineTo(PATH[i].x, PATH[i].y);
+    const path = ACTIVE_MAP.path;
+    this.gfx.moveTo(path[0].x, path[0].y);
+    for (let i = 1; i < path.length; i++) this.gfx.lineTo(path[i].x, path[i].y);
     this.gfx.strokePath();
   }
 
   private drawWaypointMarkers(): void {
     this.gfx.lineStyle(2, C.path, 0.95);
     this.gfx.fillStyle(0x000000, 0.75);
-    for (const point of PATH) {
+    for (const point of ACTIVE_MAP.path) {
       this.gfx.fillCircle(point.x, point.y, 5);
       this.gfx.strokeCircle(point.x, point.y, 5);
     }

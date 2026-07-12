@@ -1,8 +1,8 @@
 import Phaser from 'phaser';
-import { EventBus, GameEvents } from '../core/EventBus';
+import { GameEvents, emitGameEvent, offGameEvent, onGameEvent } from '../core/EventBus';
 import { GameState } from '../core/GameState';
-import { PLAY_WIDTH, GAME_HEIGHT, PATH_WIDTH, HUD_HEIGHT, COLORS } from '../core/constants';
-import { PATH } from '../data/path';
+import { COLORS } from '../core/constants';
+import { ACTIVE_MAP } from '../data/maps';
 import { TOWER_TYPES, type TowerType } from '../data/towers';
 import { TOWER_SPRITE_SCALE, type Tower } from '../entities/Tower';
 import { isValidPlacement } from '../systems/placement';
@@ -42,12 +42,19 @@ export class BuildManager {
       .setDepth(1000)
       .setVisible(false);
 
-    EventBus.on(GameEvents.SELECT_TOWER, this.onSelect, this);
+    onGameEvent(GameEvents.SELECT_TOWER, this.onSelect, this);
+    onGameEvent(GameEvents.MATCH_RESET, this.onMatchReset, this);
     scene.input.on(Phaser.Input.Events.POINTER_MOVE, this.onPointerMove, this);
     scene.input.on(Phaser.Input.Events.POINTER_DOWN, this.onPointerDown, this);
   }
 
-  private onSelect(towerTypeId: string | null): void {
+  /** Reinício limpa seleção e preview pendentes (contrato de roster UI). */
+  private onMatchReset(): void {
+    this.selectedType = null;
+    this.preview.setVisible(false);
+  }
+
+  private onSelect({ towerTypeId }: { towerTypeId: string | null }): void {
     if (GameState.isBuildLocked) return;
     this.selectedType = towerTypeId ? TOWER_TYPES[towerTypeId] : null;
     if (!this.selectedType) {
@@ -104,6 +111,7 @@ export class BuildManager {
     this.previewRange.setFillStyle(color, 0.1);
   }
 
+  /** Caminho, largura da estrada e limites vêm todos do contrato do mapa ativo. */
   private isValidPlacement(x: number, y: number, t: TowerType): boolean {
     return isValidPlacement({
       x,
@@ -111,9 +119,9 @@ export class BuildManager {
       radius: t.radius,
       cost: t.cost,
       money: GameState.money,
-      path: PATH,
-      pathHalfWidth: PATH_WIDTH / 2,
-      bounds: { minX: 0, maxX: PLAY_WIDTH, minY: HUD_HEIGHT, maxY: GAME_HEIGHT },
+      path: ACTIVE_MAP.path,
+      pathHalfWidth: ACTIVE_MAP.roadWidth / 2,
+      bounds: ACTIVE_MAP.buildBounds,
       towers: this.getTowers(),
       towerGap: 4,
     });
@@ -131,11 +139,12 @@ export class BuildManager {
     // Sai do modo de construção após colocar (o jogador reabre pelo HUD).
     this.selectedType = null;
     this.preview.setVisible(false);
-    EventBus.emit(GameEvents.SELECT_TOWER, null);
+    emitGameEvent(GameEvents.SELECT_TOWER, { towerTypeId: null });
   }
 
   destroy(): void {
-    EventBus.off(GameEvents.SELECT_TOWER, this.onSelect, this);
+    offGameEvent(GameEvents.SELECT_TOWER, this.onSelect, this);
+    offGameEvent(GameEvents.MATCH_RESET, this.onMatchReset, this);
     this.scene.input.off(Phaser.Input.Events.POINTER_MOVE, this.onPointerMove, this);
     this.scene.input.off(Phaser.Input.Events.POINTER_DOWN, this.onPointerDown, this);
   }

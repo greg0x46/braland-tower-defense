@@ -99,21 +99,30 @@ python3 -m pip install Pillow
 
 ## Como jogar
 
-1. Clique em **🐕 Vira-lata Caramelo ($50)** no topo para entrar no modo de construção.
+1. Clique no card **🐕 Vira-lata Caramelo ($50)** na barra lateral para entrar no
+   modo de construção.
 2. Mova o mouse pelo campo: o preview fica **verde** (válido) ou **vermelho**
    (em cima do caminho / sobre outra torre / sem dinheiro). Clique para construir.
-3. Clique em **▶ Iniciar Onda**. Os 🛵 seguem o caminho; as torres atiram.
+3. Clique em **▶ Iniciar**. Os 🛵 seguem o caminho; as torres atiram.
 4. Inimigos abatidos dão dinheiro; inimigos que chegam ao fim tiram vida.
-5. Sobreviva às 3 ondas para vencer. Vida zerada = derrota.
+5. As ondas são **infinitas** e ficam progressivamente mais difíceis. Não há
+   vitória: o objetivo é aguentar o máximo de ondas possível. Vida zerada =
+   derrota.
+
+**Contrato de partida** (modo `endless`): a partida abre pausada no setup — dá
+para construir antes de iniciar. Depois do primeiro **Iniciar**, pausar congela
+o jogo *e* trava a construção. Derrota é a única condição de fim, e só o
+**Jogar novamente** sai dela. Detalhes em
+[`src/systems/matchProgression.ts`](src/systems/matchProgression.ts).
 
 ## Escopo desta fatia
 
 Incluído: 1 mapa, 1 inimigo (🛵 Dois Caras numa Moto), 1 torre (🐕 Vira-lata
-Caramelo), caminho + movimento, ondas, construção livre, dano, dinheiro, vida,
-vitória/derrota. Visual com formas + emoji (sem assets externos).
+Caramelo), caminho + movimento, ondas infinitas com dificuldade progressiva,
+construção livre, dano, dinheiro, vida, pausa e derrota.
 
 Fora (próximas rodadas): Motoboy, Faria Limer, Político, Ônibus Lotado, Carreta
-Furacão (chefe), ondas 4–10, upgrades, backend.
+Furacão (chefe), upgrades, backend.
 
 ## Arquitetura
 
@@ -122,11 +131,17 @@ src/
   main.ts              Config do Phaser + registro de cenas
   core/
     constants.ts       Dimensões, cores, valores iniciais
-    EventBus.ts        EventEmitter global + nomes de eventos
-    GameState.ts       Dinheiro, vida, onda (emite eventos)
+    EventBus.ts        Catálogo de eventos (produtor/consumidor/payload) + emissão tipada
+    GameState.ts       Dinheiro, vida, onda e estado da partida (emite eventos)
   data/                Config data-driven (adicionar conteúdo = nova entrada)
-    path.ts  enemies.ts  towers.ts  waves.ts
+    contracts.ts       Valores de gameplay ACEITOS (o portão falha se derivarem)
+    maps.ts            Contrato de mapa: visual, caminho, construção e debug
+    enemies.ts  towers.ts  waves.ts  path.ts
   systems/             Regras puras sem Phaser (testáveis via Vitest)
+    matchProgression.ts Máquina de estados da partida (endless, derrota-só)
+    combat.ts          Resolve o ataque pelo comportamento, não pelo sprite
+    mapContract.ts     Valida o contrato de mapa (caminho, estrada, limites)
+    rosterLayout.ts    Quantos cards cabem, rolagem, alcançabilidade
     geometry.ts        Distância ponto→segmento / ponto→caminho
     targeting.ts       Seleção do alvo mais avançado no alcance
     placement.ts       Validação de construção (limites/caminho/overlap/$)
@@ -136,18 +151,24 @@ src/
     DebugOverlay.ts    Overlay de depuração (só em dev; tecla backtick)
   entities/
     Enemy.ts           Segue o caminho; barra de vida
-    Tower.ts           Mira e dispara na cadência
+    Tower.ts           Mira e ataca na cadência (via systems/combat)
     Projectile.ts      Perseguição simples; aplica dano
+    TowerAttackAnimator.ts  Só apresentação: dá a deixa de tempo, não o dano
   managers/
     BuildManager.ts    Seleção + preview + validação + compra
-    WaveManager.ts     Agenda spawns; detecta fim da onda / vitória
+    WaveManager.ts     Agenda spawns; encadeia a próxima onda (progressão infinita)
   scenes/
     BootScene.ts       Reinicia estado e sobe Game + UI
     GameScene.ts       Mundo, loop principal, listas de entidades
-    UIScene.ts         HUD, botões, tela de fim
+    UIScene.ts         HUD, menu de torres (rolável), tela de fim
 ```
 
 **Como estender**: um novo inimigo/torre é uma entrada em `data/enemies.ts` /
-`data/towers.ts`; uma nova onda é uma entrada em `data/waves.ts`. Mecânicas
-próprias (ex.: Motoboy móvel, debuff do Político) entram como subclasses/campos
-extras nas entidades correspondentes.
+`data/towers.ts` — a torre declara seu `attack` (`projectile`, `direct` ou
+`area`), e o dano nunca depende de qual sprite existe. Um novo mapa é uma entrada
+em `data/maps.ts`, e movimento, construção e debug o seguem juntos.
+
+**Contratos aceitos**: valores de gameplay críticos (stats do roster, perfil de
+onda, comportamento de ataque) ficam em `data/contracts.ts`. Se o runtime divergir,
+`npm run check` falha dizendo qual métrica mudou. Mudança intencional de
+balanceamento = atualizar o contrato com `reason`; nunca afrouxar o teste.

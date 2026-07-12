@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { isValidPlacement, type PlacementRequest } from './placement';
-import { PATH_WIDTH } from '../core/constants';
+import { ACTIVE_MAP } from '../data/maps';
 import type { Point } from '../data/path';
 
 const PATH: Point[] = [
@@ -41,15 +41,15 @@ describe('isValidPlacement', () => {
 
   it('aplica a largura revisada da estrada como largura total', () => {
     const radius = 18;
-    const blockedDistance = PATH_WIDTH / 2 + radius - 1;
-    const freeDistance = PATH_WIDTH / 2 + radius;
+    const blockedDistance = ACTIVE_MAP.roadWidth / 2 + radius - 1;
+    const freeDistance = ACTIVE_MAP.roadWidth / 2 + radius;
 
     expect(
       isValidPlacement(
         base({
           y: 300 + blockedDistance,
           radius,
-          pathHalfWidth: PATH_WIDTH / 2,
+          pathHalfWidth: ACTIVE_MAP.roadWidth / 2,
         }),
       ),
     ).toBe(false);
@@ -58,7 +58,7 @@ describe('isValidPlacement', () => {
         base({
           y: 300 + freeDistance,
           radius,
-          pathHalfWidth: PATH_WIDTH / 2,
+          pathHalfWidth: ACTIVE_MAP.roadWidth / 2,
         }),
       ),
     ).toBe(true);

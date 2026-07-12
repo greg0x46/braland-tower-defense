@@ -1,8 +1,14 @@
 import Phaser from 'phaser';
-import type { TowerType } from '../data/towers';
+import { attackBehaviorOf, type AttackBehavior, type TowerType } from '../data/towers';
 import type { Enemy } from './Enemy';
 import { COLORS } from '../core/constants';
-import { pickMostAdvancedInRange } from '../systems/targeting';
+import {
+  appliesOnCue,
+  cooldownSeconds,
+  isTargetValid,
+  resolveAttack,
+  type AttackOutcome,
+} from '../systems/combat';
 import { TowerAttackAnimator } from './TowerAttackAnimator';
 
 /**
@@ -29,6 +35,8 @@ export type FireFn = (
 export class Tower extends Phaser.GameObjects.Container {
   readonly def: TowerType;
   readonly radius: number;
+  /** Contrato de ataque: quem decide dano, alcance, cadência e regra de alvo. */
+  readonly behavior: AttackBehavior;
 
   private cooldown = 0;
   private readonly fireInterval: number;
@@ -37,13 +45,16 @@ export class Tower extends Phaser.GameObjects.Container {
   private readonly visualRoot: Phaser.GameObjects.Container;
   private readonly spriteVisual?: Phaser.GameObjects.Image;
   private readonly attackAnimator?: TowerAttackAnimator;
+  /** Efeito resolvido, aguardando a deixa da animação (`visualCuePolicy: 'onCue'`). */
+  private pendingOutcome: AttackOutcome<Enemy> | null = null;
 
   constructor(scene: Phaser.Scene, x: number, y: number, type: TowerType, fire: FireFn) {
     super(scene, x, y);
     this.def = type;
     this.radius = type.radius;
+    this.behavior = attackBehaviorOf(type);
     this.fire = fire;
-    this.fireInterval = 1 / type.fireRate;
+    this.fireInterval = cooldownSeconds(this.behavior);
 
     this.rangeRing = scene.add
       .circle(0, 0, type.range, type.color, 0.08)
@@ -71,6 +82,11 @@ export class Tower extends Phaser.GameObjects.Container {
         idleSpriteKey: type.spriteKey,
         getOrigin: () => ({ x: this.x, y: this.y }),
         onFireCue: this.handleFireCue,
+        // Rede de segurança do FR-014: se a animação terminar sem dar a deixa
+        // (frames quebrados, estágio sem cue), o efeito ainda é aplicado. Uma
+        // animação defeituosa nunca desliga o dano da torre.
+        onComplete: this.handleFireCue,
+        onCancel: this.discardPendingOutcome,
       });
     }
     scene.add.existing(this);
@@ -127,6 +143,10 @@ export class Tower extends Phaser.GameObjects.Container {
     return image;
   }
 
+  /**
+   * O comportamento decide o efeito; a animação, no máximo, o instante. Uma torre
+   * sem sprite de ataque aplica exatamente o mesmo dano, no tempo de fallback.
+   */
   update(deltaSec: number, enemies: Enemy[]): void {
     if (this.cooldown > 0) this.cooldown -= deltaSec;
 
@@ -135,9 +155,10 @@ export class Tower extends Phaser.GameObjects.Container {
       if (
         target &&
         !this.attackAnimator.hasEmittedFireCue &&
-        !this.isTargetValid(target)
+        !isTargetValid(this.behavior, this, target)
       ) {
         this.attackAnimator.cancel();
+        this.pendingOutcome = null;
         return;
       }
 
@@ -147,36 +168,64 @@ export class Tower extends Phaser.GameObjects.Container {
 
     if (this.cooldown > 0) return;
 
-    const target = this.pickTarget(enemies);
-    if (!target) return;
+    const outcome = resolveAttack(this.behavior, this, enemies);
+    if (outcome.kind === 'none') return;
 
-    if (this.attackAnimator) {
-      if (!this.attackAnimator.start(target)) return;
+    // `onCue` só adia a aplicação quando existe animação para dar a deixa.
+    const waitsForCue = appliesOnCue(this.behavior) && this.attackAnimator !== undefined;
+    if (waitsForCue) {
+      const target = this.primaryTarget(outcome);
+      if (!target || !this.attackAnimator!.start(target)) return;
+      this.pendingOutcome = outcome;
     } else {
-      this.fire(this.x, this.y, target, this.def.damage, this.def.projectileSpeed);
+      this.applyOutcome(outcome);
     }
+
     this.cooldown = this.fireInterval;
   }
 
-  /** Inimigo vivo mais avançado dentro do alcance. */
-  private pickTarget(enemies: Enemy[]): Enemy | null {
-    return pickMostAdvancedInRange(this.x, this.y, this.def.range, enemies);
+  /** Aplica o efeito descrito pelo comportamento. */
+  private applyOutcome(outcome: AttackOutcome<Enemy>): void {
+    switch (outcome.kind) {
+      case 'none':
+        return;
+
+      case 'projectile':
+        this.fire(this.x, this.y, outcome.target, outcome.damage, outcome.speed);
+        return;
+
+      case 'direct':
+      case 'area':
+        for (const target of outcome.targets) {
+          if (isTargetValid(this.behavior, this, target)) target.takeDamage(outcome.damage);
+        }
+        return;
+    }
   }
 
-  private handleFireCue = (target: Enemy): void => {
-    if (!this.isTargetValid(target)) {
-      this.attackAnimator?.cancel();
-      return;
-    }
-    target.takeDamage(this.def.damage);
+  /** Alvo que a animação persegue (o epicentro, no caso de área). */
+  private primaryTarget(outcome: AttackOutcome<Enemy>): Enemy | null {
+    if (outcome.kind === 'projectile') return outcome.target;
+    if (outcome.kind === 'direct' || outcome.kind === 'area') return outcome.targets[0] ?? null;
+    return null;
+  }
+
+  /**
+   * A animação chegou ao frame do golpe: aplica o efeito já resolvido. Os alvos
+   * são revalidados dentro de `applyOutcome` — quem morreu ou vazou durante a
+   * corrida não leva dano.
+   */
+  private handleFireCue = (): void => {
+    const outcome = this.pendingOutcome;
+    this.pendingOutcome = null;
+    if (!outcome) return;
+    this.applyOutcome(outcome);
   };
 
-  private isTargetValid(target: Enemy): boolean {
-    if (target.status !== 'alive') return false;
-    const dx = target.x - this.x;
-    const dy = target.y - this.y;
-    return dx * dx + dy * dy <= this.def.range * this.def.range;
-  }
+  /** O alvo saiu do alcance/morreu durante a animação: o ataque não acontece. */
+  private discardPendingOutcome = (): void => {
+    this.pendingOutcome = null;
+  };
 
   /** Anel de alcance também usado como feedback (ex.: destaque). */
   showRange(visible: boolean): void {

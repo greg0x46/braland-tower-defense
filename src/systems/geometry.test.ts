@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { clamp, pointSegmentDistance, distanceToPath } from './geometry';
 import { GAME_HEIGHT, PLAY_WIDTH } from '../core/constants';
-import { PATH, pathLength } from '../data/path';
+import { pathLength } from '../data/path';
+import { ACTIVE_MAP } from '../data/maps';
 import type { Point } from '../data/path';
 
 describe('clamp', () => {
@@ -46,9 +47,9 @@ describe('distanceToPath', () => {
   });
 });
 
-describe('PATH data', () => {
+describe('ACTIVE_MAP.path data', () => {
   it('mantém waypoints visíveis dentro da área jogável', () => {
-    for (const point of PATH.slice(1, -1)) {
+    for (const point of ACTIVE_MAP.path.slice(1, -1)) {
       expect(point.x).toBeGreaterThanOrEqual(0);
       expect(point.x).toBeLessThanOrEqual(PLAY_WIDTH);
       expect(point.y).toBeGreaterThanOrEqual(0);
@@ -57,6 +58,6 @@ describe('PATH data', () => {
   });
 
   it('mantém comprimento não nulo', () => {
-    expect(pathLength(PATH)).toBeGreaterThan(0);
+    expect(pathLength(ACTIVE_MAP.path)).toBeGreaterThan(0);
   });
 });
